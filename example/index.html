@@ -1,17 +1,50 @@
 <!doctype html>
 <html>
+
   <head>
+
     <meta charset="utf-8">
-    <title>angular watch resource</title>
+    <title>angular watch resource - example</title>
 
     <script src="angular/angular.js"></script>
     <script src="angular-watch-resource.js"></script>
 
-    <script src="scripts/main.js"></script>
+    <script src="scripts/app.js"></script>
+    <script src="scripts/User.js"></script>
+
   </head>
-  <body ng-app="app">
+
+  <body ng-app="app" ng-cloak>
+
     <div class="container" ng-controller="AppCtrl">
+
       <h1>{{ hello }}</h1>
+      <hr/>
+
+      <h3>User</h3>
+
+      <div ng-switch="user.ready">
+        <p ng-switch-when="true">{{ user.data.username }}</p>
+        <p ng-switch-when="false">Loading Data...</p>
+      </div>
+
+      <h3>Followings:</h3>
+
+      <div ng-switch="followings.ready">
+        <div ng-switch-when="true">
+          <p ng-show="followings.isEmpty()">No followings given.</p>
+          <ul>
+            <li ng-repeat="item in followings.data track by $index">{{ item.username }}</li>
+          </ul>
+        </div>
+        <div ng-switch-when="false">
+          <p ng-hide="followings.error">Loading Data...</p>
+          <p ng-show="followings.error">Error occurred !</p>
+        </div>
+      </div>
+
     </div>
+
   </body>
+
 </html>

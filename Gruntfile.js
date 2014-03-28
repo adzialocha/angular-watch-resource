@@ -7,26 +7,25 @@ module.exports = function (grunt) {
   grunt.initConfig({
 
     npm: grunt.file.readJSON('package.json'),
+    bower: grunt.file.readJSON('.bowerrc'),
 
     yeoman: {
       app: 'example',
       src: 'src',
-      dist: 'dist'
+      dist: 'dist',
+      test: 'test'
     },
 
     watch: {
 
-      livereload: {
-        options: {
-          livereload: '<%= connect.options.livereload %>'
-        },
+      server: {
         files: [
           '<%= yeoman.app %>/*.html',
-          '{.tmp,<%= yeoman.app %>}/scripts/{,*/}*.js',
-          '<%= yeoman.src %>}/{,*/}*.js',
-          'test}/specs/*.js',
-          '<%= yeoman.src %>}/{,*/}*.css'
-        ]
+          '<%= yeoman.app %>/scripts/{,*/}*.js',
+          '<%= yeoman.src %>/{,*/}*.js',
+          '<%= yeoman.test %>/*.js'
+        ],
+        tasks: ['jshint', 'test']
       }
 
     },
@@ -34,36 +33,16 @@ module.exports = function (grunt) {
     connect: {
       options: {
         port: 9000,
-        livereload: 35729,
         hostname: 'localhost'
       },
-      livereload: {
+      watch: {
         options: {
-          open: true,
           base: [
             '.tmp',
             '<%= yeoman.src %>',
-            'bower_components',
+            '<%= bower.directory %>',
             '<%= yeoman.app %>'
           ]
-        }
-      },
-      test: {
-        options: {
-          base: [
-            '.tmp',
-            'test',
-            '<%= yeoman.app %>',
-            'bower_components',
-            '<%= yeoman.app %>'
-          ]
-        }
-      },
-      dist: {
-        options: {
-          open: true,
-          base: '<%= yeoman.dist %>',
-          livereload: false
         }
       }
     },
@@ -89,35 +68,21 @@ module.exports = function (grunt) {
       all: [
         'Gruntfile.js',
         '<%= yeoman.app %>/scripts/{,*/}*.js',
-        '<%= yeoman.src %>/{,*/}*.js',
-        'test/spec/{,*/}*.js'
+        '<%= yeoman.src %>/{,*/}*.js'
       ]
     },
 
-    karma: {
-      options: {
-        frameworks: [ 'jasmine' ],
-        files: [
-          'bower_components/angular/angular.js',
-          'bower_components/angular-mocks/angular-mocks.js',
-          'bower_components/jquery/jquery.js',
-          '<%= yeoman.src %>/*.js',
-          'test/specs/*.js'
+    jasmine: {
+      dist: {
+        src: [
+          '<%= bower.directory %>/angular/angular.js',
+          '<%= bower.directory %>/angular-mocks/angular-mocks.js',
+          '<%= bower.directory %>/jquery/jquery.js',
+          '<%= yeoman.src %>/{,*/}*.js'
         ],
-        reporters: [ 'dots', 'progress' ],
-        logColors: true,
-        browsers: ['PhantomJS']
-      },
-
-      unit:
-      {
-        singleRun: true
-      },
-
-      live:
-      {
-        autoWatch: true,
-        singleRun: false
+        options: {
+          specs: '<%= yeoman.test %>/{,*/}*.js'
+        }
       }
     },
 
@@ -133,11 +98,30 @@ module.exports = function (grunt) {
 
     uglify: {
       options: {
-        banner: '/*! <%= npm.name %>.min.js <%= grunt.template.today("dd-mm-yyyy") %> */\n'
+        preserveComments: 'some',
+        banner: '/*! <%= npm.name %>.js <%= grunt.template.today("dd-mm-yyyy") %> */\n'
       },
-      dist: {
+      minified: {
+        options: {
+          sourceMap: true,
+          sourceMapName: '<%= yeoman.dist %>/<%= npm.name %>.min.map'
+        },
         files: {
-          'dist/<%= npm.name %>.min.js': ['<%= concat.dist.dest %>']
+          '<%= yeoman.dist %>/<%= npm.name %>.min.js': ['<%= yeoman.dist %>/<%= npm.name %>.js']
+        }
+      },
+      beautified: {
+        options: {
+          beautify: {
+            width: 80,
+            'indent_level': 2,
+            beautify: true
+          },
+          mangle: false,
+          compress: false
+        },
+        files: {
+          '<%= yeoman.dist %>/<%= npm.name %>.js': ['<%= yeoman.dist %>/<%= npm.name %>.js']
         }
       }
     }
@@ -145,31 +129,23 @@ module.exports = function (grunt) {
 
   grunt.registerTask('serve', [
     'clean:server',
-    'connect:livereload',
+    'connect',
     'watch'
   ]);
 
   grunt.registerTask('test', [
-    'clean:server',
-    'connect:test',
-    'karma:unit'
-  ]);
-
-  grunt.registerTask('test:live', [
-    'clean:server',
-    'connect:test',
-    'karma:live'
+    'jasmine'
   ]);
 
   grunt.registerTask('build', [
-    'jshint',
-    'test',
     'clean:dist',
     'concat',
     'uglify'
   ]);
 
   grunt.registerTask('default', [
+    'jshint',
+    'test',
     'build'
   ]);
 };
