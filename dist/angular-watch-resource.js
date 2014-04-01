@@ -1,4 +1,4 @@
-/*! angular-watch-resource.js 28-03-2014 */
+/*! angular-watch-resource.js 01-04-2014 */
 (function(window, angular, undefined) {
   "use strict";
   function _now() {
@@ -38,7 +38,12 @@
     }
     return serialized;
   }
-  var ngWatchResource = angular.module("angular-watch-resource", []);
+  function _unique(cArray) {
+    return cArray.filter(function(value, index, self) {
+      return self.indexOf(value) === index;
+    });
+  }
+  var ngWatchResource = angular.module("ngWatchResource", []);
   ngWatchResource.provider("ResourceConfiguration", [ function() {
     var _configuration = {
       basePath: "",
@@ -78,36 +83,155 @@
     };
     return ResourceConfiguration;
   } ]);
-  ngWatchResource.factory("Resource", [ "$cacheFactory", "$http", "ResourceConfiguration", function($cacheFactory, $http, ResourceConfiguration) {
+  ngWatchResource.factory("Resource", [ "$cacheFactory", "$http", "$q", "$interval", "ResourceConfiguration", function($cacheFactory, $http, $q, $interval, ResourceConfiguration) {
     var _cache = $cacheFactory("resourceCache");
+    var _cacheHandler = {
+      optimizeCollection: function(hCacheInfo) {
+        var optimized = {
+          cached: [],
+          remote: []
+        };
+        var cacheKey;
+        angular.forEach(hCacheInfo.collection, function(cItem) {
+          cacheKey = hCacheInfo.resourceName + "/" + cItem;
+          if (_cache.get(cacheKey) && _cache.get(cacheKey).ready) {
+            optimized.cached.push(_cache.get(cacheKey).data);
+          } else {
+            optimized.remote.push(cItem);
+          }
+        });
+        return optimized;
+      },
+      populate: function(hCacheInfo, hResources) {
+        var cacheKey, resource, path;
+        angular.forEach(hResources, function(cItem) {
+          if ("id" in cItem) {
+            cacheKey = hCacheInfo.resourceName + "/" + cItem.id;
+            path = new Path(cacheKey, null);
+            resource = new Resource(cacheKey, {}, path.cache);
+            resource.setReady(cItem);
+            _cache.put(cacheKey, resource);
+          }
+        });
+        return true;
+      }
+    };
     function Path(rUrl, rValues) {
       this.url = rUrl;
       this.values = rValues;
+      this.cache = {
+        key: null,
+        collectionKey: null,
+        collection: [],
+        resourceName: undefined,
+        resourceId: undefined
+      };
     }
     Path.prototype.build = function() {
-      var _this, url;
-      if (!this.values) {
-        return this.url;
-      }
+      var _this, url, cacheKeys, cacheCollectionKey;
       _this = this;
+      cacheCollectionKey = this.url.match(/\{([^\}]+)\}/);
+      if (cacheCollectionKey) {
+        this.cache.collectionKey = cacheCollectionKey[1].replace(":", "");
+        if (!(this.cache.collectionKey in this.values && angular.isArray(this.values[this.cache.collectionKey]))) {
+          throw "ngWatchResource Error: collection key given but does not point to an array";
+        }
+        this.cache.collection = _unique(this.values[this.cache.collectionKey]);
+      }
       url = this.url.replace(/\\:/g, ":");
-      angular.forEach(Object.keys(this.values), function(eKey) {
-        url = url.replace(new RegExp(":" + eKey, "g"), _this.values[eKey]);
-      });
+      url = url.replace(/\{([^\}]+)\}/, "");
+      if (this.values) {
+        angular.forEach(Object.keys(this.values), function(eKey) {
+          url = url.replace(new RegExp(":" + eKey, "g"), _this.values[eKey]);
+        });
+      }
+      cacheKeys = url.match(/\[([^\]]+)\]/g);
+      if (cacheKeys && cacheKeys.length > 0) {
+        this.cache.key = cacheKeys.join("/").replace(/[\[\]]/g, "");
+        var split = this.cache.key.split("/");
+        this.cache.resourceName = split[0];
+        if (cacheKeys.length > 1) {
+          this.cache.resourceId = parseInt(split[1], 10);
+        }
+      }
+      if (!cacheKeys && this.cache.collectionKey) {
+        throw "ngWatchResource Error: collection key but no resouce name given";
+      }
+      url = url.replace(/[\[\]]/g, "");
       return url;
     };
-    function Resource(rCacheId, rIsArray) {
-      this._cacheId = rCacheId;
+    function Resource(rCacheKey, rOptions, rCache) {
+      var _this = this;
+      this.__promise = $q.defer();
+      this.__options = rOptions;
+      this.__interval = null;
+      this.__cache = rCache;
       this._createdTimestamp = _now();
       this._updatedTimestamp = this._createdTimestamp;
-      this._type = rIsArray ? "array" : "object";
-      this.data = rIsArray ? [] : {};
+      this._type = rOptions.isArray ? "array" : "object";
+      this.data = rOptions.isArray ? [] : {};
       this.ready = false;
       this.error = null;
+      if (rOptions.interval !== 0) {
+        this.__interval = $interval(function() {
+          _this.fetch(true);
+        }, rOptions.interval);
+      }
     }
     Resource.prototype = {
-      setReady: function(sData, sReadyValue) {
-        this.data = sData;
+      promise: function() {
+        return this.__promise.promise;
+      },
+      stopInterval: function() {
+        $interval.cancel(this.__interval);
+        return true;
+      },
+      fetch: function(fDisableOptimization) {
+        var _this = this, params, concatResult;
+        this.__promise = $q.defer();
+        params = this.__options.params;
+        concatResult = false;
+        if (!fDisableOptimization) {
+          if (this.__cache.collectionKey && this.__cache.collection.length > 0) {
+            var optimized = _cacheHandler.optimizeCollection(this.__cache);
+            params = this.__options.params;
+            params[this.__cache.collectionKey] = optimized.remote;
+            this.data = optimized.cached;
+            if (optimized.remote.length === 0) {
+              this.__promise.resolve(this);
+              return true;
+            }
+            concatResult = true;
+          }
+        }
+        var request = {
+          method: this.__options.method,
+          url: this.__options.url + _serialize(params),
+          data: this.__options.data,
+          headers: this.__options.headers,
+          withCredentials: this.__options.withCredentials,
+          responseType: this.__options.responseType,
+          cache: false
+        };
+        $http(request).success(function(rData) {
+          _this.setReady(rData, true, concatResult);
+          _cache.put(_this.__cache.key, _this);
+          _this._updatedTimestamp = _now();
+          if (_this.__cache.resourceName && _this._type === "array") {
+            _cacheHandler.populate(_this.__cache, rData);
+          }
+          _this.__promise.resolve(_this);
+        }).error(function(rErrorData) {
+          _this.setError(rErrorData);
+          _this.__promise.reject(_this);
+        });
+      },
+      setReady: function(sData, sReadyValue, sConcat) {
+        if (sConcat && angular.isArray(this.data)) {
+          this.data = this.data.concat(sData);
+        } else {
+          this.data = sData;
+        }
         this.error = null;
         this.ready = sReadyValue || true;
         return this.ready;
@@ -141,9 +265,10 @@
         withCredentials: false,
         responseType: "json",
         method: "GET",
-        data: ResourceConfiguration.defaultData,
-        params: ResourceConfiguration.defaultParams,
-        headers: ResourceConfiguration.defaultHeaders
+        interval: 0,
+        data: angular.copy(ResourceConfiguration.defaultData),
+        params: angular.copy(ResourceConfiguration.defaultParams),
+        headers: angular.copy(ResourceConfiguration.defaultHeaders)
       };
       if (rOptions && typeof rOptions === "object") {
         angular.forEach(Object.keys(rOptions), function(oKey) {
@@ -156,28 +281,30 @@
           }
         });
       }
-      var path = new Path(rPath, rVars).build();
-      var cacheKey = _hash(path);
-      if (!_cache.get(cacheKey)) {
-        var resource = new Resource(cacheKey, options.isArray);
-        _cache.put(cacheKey, resource);
-        var request = {
-          method: options.method,
-          url: ResourceConfiguration.basePath + path + _serialize(options.params),
-          data: options.data,
-          headers: options.headers,
-          withCredentials: options.withCredentials,
-          responseType: options.responseType,
-          cache: false
-        };
-        $http(request).success(function(rData) {
-          resource.setReady(rData);
-          _cache.put(cacheKey, resource);
-        }).error(function(rErrorData) {
-          resource.setError(rErrorData);
-        });
+      var cacheKey, url, resource;
+      var path = new Path(rPath, rVars);
+      url = ResourceConfiguration.basePath + path.build();
+      if (path.cache.key) {
+        if (path.cache.collectionKey) {
+          var collection = path.cache.collection.sort();
+          cacheKey = _hash(collection.join("."));
+          options.params[path.cache.collectionKey] = collection;
+          options.isArray = true;
+        } else {
+          cacheKey = path.cache.key;
+        }
+      } else {
+        cacheKey = _hash(url);
       }
-      return _cache.get(cacheKey);
+      options.url = url;
+      if (!_cache.get(cacheKey)) {
+        resource = new Resource(cacheKey, options, path.cache);
+        _cache.put(cacheKey, resource);
+        resource.fetch();
+      } else {
+        resource = _cache.get(cacheKey);
+      }
+      return resource;
     }
     return watchResource;
   } ]);

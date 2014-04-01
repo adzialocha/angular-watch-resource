@@ -4,14 +4,26 @@
 
 angular.module('app').factory('User', [ 'Resource', function(Resource) {
 
+  var _resourceName = 'users';
+
   var User = {
 
-    one: function(uId) {
-      return Resource('users/:id', { id: uId });
+    one: function(uParams) {
+      return Resource('/[:name]/[:id]', { name: _resourceName, id: uParams.id });
     },
 
-    followings: function(uId) {
-      return Resource('users/:id/followings', { id: uId }, { isArray: true });
+    oneInterval: function(uParams) {
+      return Resource('/[:name]/[:id]', { name: _resourceName, id: uParams.id }, { interval: 30000 });
+    },
+
+    followers: function(uParams) {
+      return Resource('/[:name]/:id/followers',
+        { name: _resourceName, id: uParams.id },
+        { isArray: true });
+    },
+
+    collection: function(uParams) {
+      return Resource('/[:name]{:id}', { name: _resourceName, id: uParams.ids });
     }
 
   };
