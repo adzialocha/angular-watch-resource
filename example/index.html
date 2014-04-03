@@ -11,6 +11,31 @@
 
     <script src="scripts/app.js"></script>
 
+    <style type="text/css">
+
+      h1, h2, h3, p {
+        font-family: 'Arial', sans-serif;
+      }
+
+      p {
+        margin: 0px;
+        line-height: 1.25em;
+      }
+
+      .meta {
+        color: #666666;
+      }
+
+      .online {
+        color: green;
+      }
+
+      .offline {
+        color: red;
+      }
+
+    </style>
+
   </head>
 
   <body ng-app="app" ng-cloak>
@@ -20,12 +45,18 @@
 
       <div ng-switch="user.isReady()">
         <div ng-switch-when="true">
+          <img ng-src="{{ user.data.avatar_url}}" />
           <p><strong>{{ user.data.username }}</strong></p>
-          <p ng-show="user.data.online" style="color: green">is online!</p>
+          <p class="online" ng-show="user.data.online">is online!</p>
+          <p class="offline" ng-show="! user.data.online">is offline</p>
           <p>{{ user.data.city }} {{ user.data.country }}</p>
-          <p>{{ user.data.website }}</p>
-
-          <p><small>updated @ {{ user.$updatedTimestamp | timestampToDate }}</small></p>
+          <p><a href="{{ user.data.website }}" target="_blank">{{ user.data.website }}</a></p>
+          <p class="meta" ng-switch="user.$requestTimestamp">
+            <small ng-switch-default>request @ {{ user.$requestTimestamp | timestampToDate }}</small>
+            <small ng-switch-when="undefined">no request</small>
+          </p>
+          <p class="meta"><small>created @ {{ user.$createdTimestamp | timestampToDate }}</small></p>
+          <p class="meta"><small>updated @ {{ user.$updatedTimestamp | timestampToDate }}</small></p>
         </div>
         <div ng-switch-when="false">
           <p>Loading data..</p>
@@ -36,7 +67,7 @@
 
       <div ng-switch="followings.isReady()">
         <div ng-switch-when="true">
-          <p ng-show="followings.isEmpty()">No Followings given.</p>
+          <p ng-show="followings.isEmpty()">No Followings given. <a href="#" ng-click="selectDefaultUser()">go back to start</a></p>
           <ul>
             <li ng-repeat="userItem in followings.data track by $index">
               <p><a href="#" ng-click="selectUser(userItem.id)">{{ userItem.username }}</a></p>

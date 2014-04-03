@@ -2,7 +2,7 @@
 
 'use strict';
 
-var UPDATE_INTERVAL = 100000;
+var UPDATE_INTERVAL = 10000;
 var DEFAULT_USER_ID = 545316;
 
 var app = angular.module('app', [ 'ngWatchResource' ]);
@@ -26,6 +26,10 @@ app.controller('AppCtrl', ['$scope', '$timeout', 'Resource', function($scope, $t
   $scope.selectUser = function(uId) {
     Resource('/users/:id', { id: _selectedUserId }).one('users').stop();
     _selectedUserId = uId;
+  };
+
+  $scope.selectDefaultUser = function() {
+    $scope.selectUser(DEFAULT_USER_ID);
   };
 
   $scope.user = null;
