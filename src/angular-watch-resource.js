@@ -55,13 +55,15 @@
 
   /* @ ResourceService */
 
-  ngWatchResource.factory('Resource', [ '$cacheFactory', '$http', '$q', '$timeout', 'ResourceConfiguration',
-    function($cacheFactory, $http, $q, $timeout, ResourceConfiguration) {
+  ngWatchResource.factory('Resource', [ '$cacheFactory', '$http', '$q', '$interval', 'ResourceConfiguration',
+    function($cacheFactory, $http, $q, $interval, ResourceConfiguration) {
 
     /* Constants */
 
     var ID_KEY = 'id';
+    var FORCED_ID_START = 1;
 
+    var DEFAULT_METHOD = 'GET';
     var DEFAULT_COLLECTION_KEY = 'id';
     var DEFAULT_ARRAY = [];
     var DEFAULT_OBJECT = {};
@@ -82,11 +84,13 @@
       silent: false,
       withCredentials: false,
       responseType: 'json',
-      method: 'GET',
+      sideload: {},
       data: angular.copy(ResourceConfiguration.defaultData),
       params: angular.copy(ResourceConfiguration.defaultParams),
       headers: angular.copy(ResourceConfiguration.defaultHeaders)
     };
+
+    var _forcedId = FORCED_ID_START;
 
     var __debug = {};
 
@@ -229,9 +233,8 @@
       // update data and timestamp from element
 
       update: function(pCacheKey, pCacheData) {
-        /* jshint camelcase: false */
         var data = this.get(pCacheKey);
-        data.$_updatedTimestamp = _.now();
+        data.$updatedTimestamp = _.now();
         data.data = pCacheData;
         return this.storage.put(pCacheKey, data);
       }
@@ -297,7 +300,9 @@
 
       _insertData: function(cResourceName, cObject) {
         if (! (ID_KEY in cObject)) {
-          throw 'CacheUtilsError: cant find ID key in object.';
+          // give him an (internal) id if resource doesnt have one
+          cObject[ID_KEY] = '__internal' + _forcedId;
+          _forcedId++;
         }
 
         var pointer = new ResourcePointer().build(cResourceName, cObject[ID_KEY]);
@@ -310,6 +315,19 @@
 
         atomicCache.update(pointer.cacheKey, cObject);
         return pointer.cacheKey;
+      },
+
+      // fills the atomic cache with data from a sideload resource
+
+      _insertSideloadData: function(cSideloadData, cResources) {
+        var _this = this;
+        angular.forEach(Object.keys(cSideloadData), function(sKey) {
+          if (sKey in cResources && angular.isArray(cResources[sKey])) {
+            angular.forEach(cResources[sKey], function(eItem) {
+              _this._insertData(cSideloadData[sKey], eItem);
+            });
+          }
+        });
       },
 
       // returns an array with atomic cache keys
@@ -344,6 +362,9 @@
           });
         } else {
           atomicCacheKeys.push(this._insertData(cResourceName, cObject));
+          if (! (_.isEmpty(cOptions.sideload))) {
+            this._insertSideloadData(cOptions.sideload, cObject);
+          }
         }
         return atomicCacheKeys;
       }
@@ -356,10 +377,10 @@
      */
 
     var AtomicResource = function(rResourceName, rId) {
-      this._createdTimestamp = _.now();
-      this._updatedTimestamp = this._createdTimestamp;
-      this._resourceName = rResourceName;
-      this._resourceId = rId;
+      this.$createdTimestamp = _.now();
+      this.$updatedTimestamp = this.$createdTimestamp;
+      this.$resourceName = rResourceName;
+      this.$resourceId = rId;
       this.data = DEFAULT_OBJECT;
     };
 
@@ -396,15 +417,18 @@
     // parse variables and collection data in path to generate a cacheKey
 
     ResourcePointer.prototype.parseCacheKey = function() {
-      var path = this._path;
-      var _this = this;
+      var path, keys, i, len;
 
+      path = this._path;
       path = path.replace(/\\:/g, ':');
 
       if (this._vars) {
-        angular.forEach(Object.keys(_this._vars), function(vKey) {
-          path = path.replace(new RegExp(':' + vKey, 'g'), _this._vars[vKey]);
-        });
+        keys = Object.keys(this._vars);
+        len = keys.length;
+        // lets be more performative here, lets take a for instead of a foreach loop
+        for (i = 0; i < len; i++) {
+          path = path.replace(new RegExp(':' + keys[i], 'g'), this._vars[keys[i]]);
+        }
       }
 
       if (path[0] !== '/') {
@@ -414,12 +438,11 @@
       this.resourcePath = path;
 
       if (this.isCollection()) {
-        var hashed = _.hash( this._data.collectionArray.join('.') );
+        var hashed = _.hash(this._data.collectionArray.join('.'));
         path = path + '?' + this._data.collectionKey + '=' + hashed;
       }
 
       this.cacheKey = path;
-
       return this;
     };
 
@@ -469,7 +492,7 @@
     RequestUtils.build = function(rPointer, rOptions) {
       var url = rPointer.serializeUrl(rOptions.params);
       var request = {
-        method: rOptions.method,
+        method: DEFAULT_METHOD,
         url: url,
         data: rOptions.data,
         headers: rOptions.headers,
@@ -550,11 +573,11 @@
 
       // ignored by $watch
 
-      this.$_createdTimestamp = _.now();
-      this.$_updatedTimestamp = this.$_createdTimestamp;
-      this.$_requestTimestamp = undefined;
-      this.$_resourceName = rResourceName;
-      this.$_url = rPointer.serializeUrl(rOptions.params);
+      this.$createdTimestamp = _.now();
+      this.$updatedTimestamp = this.$createdTimestamp;
+      this.$requestTimestamp = undefined;
+      this.$resourceName = rResourceName;
+      this.$url = rPointer.serializeUrl(rOptions.params);
 
       // $watch object
 
@@ -580,8 +603,9 @@
 
         if (! fDisableOptimization) {
 
-          var optimized = RequestUtils.optimize(request, pointer, options, this.$_resourceName);
+          var optimized = RequestUtils.optimize(request, pointer, options, this.$resourceName);
           atomicCacheKeys = optimized.cachedAtomicKeys;
+
           CacheUtils.Resource.buildData(pointer, atomicCacheKeys);
 
           if (optimized.requestNotNeeded) {
@@ -609,10 +633,10 @@
 
           // give data to cache (we dont manipulate our resource directly)
 
-          atomicCacheKeys = CacheUtils.Atomic.populateCache(options, _this.$_resourceName, fResult.data);
+          atomicCacheKeys = CacheUtils.Atomic.populateCache(options, _this.$resourceName, fResult.data);
           CacheUtils.Resource.buildData(pointer, atomicCacheKeys);
 
-          _this.$_requestTimestamp = _.now();
+          _this.$requestTimestamp = _.now();
 
           // callback
 
@@ -687,12 +711,26 @@
       pointer = new ResourcePointer(rPath, rVars, data).parseCacheKey();
 
       if (! resourceCache.exists(pointer.cacheKey)) {
+
+        // merge individual options with defaults
+
         var options = _.update(defaultOptions, rOptions);
+
+        if (rData.type !== TYPE_ONE && ! _.isEmpty(rOptions.sideload)) {
+          throw 'ResourceFactoryError: resources with array data cant handle sideloading';
+        }
+
+        // create resource and put it in cache
+
         resource = new Resource(pointer, rResourceName, options);
         resourceCache.set(pointer.cacheKey, resource);
+
+        // first fetch after creating when not in silent mode
+
         if (! options.silent) {
           resource.fetch(false);
         }
+
       } else {
         resource = resourceCache.get(pointer.cacheKey);
       }

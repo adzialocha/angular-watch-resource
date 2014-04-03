@@ -14,7 +14,17 @@ var resourcesMock = {
   pages: [
     { id: 100, slug: 'a' },
     { id: 101, slug: 'b' },
-    { id: 102, slug: 'c' },
+    { id: 102, slug: 'c' }
+  ],
+  cities: [
+    { id: 122, name: 'Berlin' },
+    { id: 123, name: 'Warszawa' },
+    { id: 124, name: 'London' },
+    { id: 125, name: 'Helsinki' }
+  ],
+  countries: [
+    { id: 122, name: 'Germany' },
+    { id: 123, name: 'Poland' }
   ]
 };
 
@@ -40,6 +50,14 @@ beforeEach(function () {
     $http.when( 'GET', API_BASE_PATH + '/users/42' ).respond(200, resourcesMock.users[3]);
 
     $http.when( 'GET', API_BASE_PATH + '/users_wrong/512' ).respond(404, ERROR_MESSAGE );
+
+    var sideloadData = {
+      users: resourcesMock.users,
+      all_cities: resourcesMock.cities,
+      countries: resourcesMock.countries
+    };
+
+    $http.when( 'GET', API_BASE_PATH + '/continents' ).respond(200, sideloadData);
 
     var collection = [
       resourcesMock.users[1],
@@ -78,11 +96,11 @@ describe('ResourceService', function() {
       });
 
       it ('holds the correct resource name', function() {
-        expect(resource.$_resourceName).toEqual('pages');
+        expect(resource.$resourceName).toEqual('pages');
       });
 
       it ('holds the correct url', function() {
-        expect(resource.$_url).toEqual(API_BASE_PATH + '/books/424/pages/12');
+        expect(resource.$url).toEqual(API_BASE_PATH + '/books/424/pages/12');
       });
 
       it ('holds an object as data', function() {
@@ -90,10 +108,10 @@ describe('ResourceService', function() {
       });
 
       it ('has a timestamp', function() {
-        expect(resource.$_updatedTimestamp).toEqual(jasmine.any(Number));
-        expect(resource.$_createdTimestamp).toEqual(jasmine.any(Number));
-        expect(resource.$_createdTimestamp).not.toEqual(0);
-        expect(resource.$_updatedTimestamp).not.toEqual(0);
+        expect(resource.$updatedTimestamp).toEqual(jasmine.any(Number));
+        expect(resource.$createdTimestamp).toEqual(jasmine.any(Number));
+        expect(resource.$createdTimestamp).not.toEqual(0);
+        expect(resource.$updatedTimestamp).not.toEqual(0);
       });
 
     });
@@ -161,6 +179,46 @@ describe('ResourceService', function() {
       it ('fetches a single resource from the server', function() {
         expect(result.data.id).toEqual(12);
         expect(result.data.name).toEqual('Peter');
+      });
+
+    });
+
+    describe('#fetch with sideload option', function() {
+
+      var resource;
+
+      beforeEach(function() {
+        resource = Resource('/continents').one('continents', {
+          sideload: {
+            'users': 'users',
+            'all_cities': 'cities',
+            'countries': 'countries'
+          }
+        });
+      });
+
+      beforeEach(function() {
+        $http.expect( 'GET', API_BASE_PATH + '/continents' );
+        $http.flush();
+      });
+
+      afterEach(function() {
+        $http.verifyNoOutstandingExpectation();
+        $http.verifyNoOutstandingRequest();
+      });
+
+      it ('a sideload resource from the server', function() {
+        expect(resource.data.all_cities[1].name).toEqual('Warszawa');
+        expect(resource.data.countries[1].name).toEqual('Poland');
+      });
+
+      it ('puts its sideload resources into the cache', function() {
+        var another_resource = Resource('/cities/:id', { id: 124 }).one('cities');
+        expect(another_resource.data.id).toEqual(124);
+        expect(another_resource.data.name).toEqual('London');
+        var yet_another_resource = Resource('/countries/:id', { id: 122 }).one('countries');
+        expect(yet_another_resource.data.id).toEqual(122);
+        expect(yet_another_resource.data.name).toEqual('Germany');
       });
 
     });
@@ -274,7 +332,7 @@ describe('ResourceService', function() {
       });
 
       it ('holds correct resource name', function() {
-        expect(resource.$_resourceName).toEqual('users');
+        expect(resource.$resourceName).toEqual('users');
       });
 
       it ('holds array data', function() {
@@ -323,7 +381,7 @@ describe('ResourceService', function() {
       });
 
       it ('holds correct resource name', function() {
-        expect(resource.$_resourceName).toEqual('users');
+        expect(resource.$resourceName).toEqual('users');
       });
 
       it ('holds array data', function() {
