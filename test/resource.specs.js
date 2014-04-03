@@ -2,6 +2,7 @@
 
 var API_BASE_PATH = 'https://api.myservice.de';
 var DEFAULT_HEADERS = { 'auth_token': 'some_secret_token' };
+var ERROR_MESSAGE = { message: 'a error message', code: 1223 };
 
 var resourcesMock = {
   users: [
@@ -9,6 +10,11 @@ var resourcesMock = {
     { id: 12, name: 'Peter' },
     { id: 712, name: 'Paul' },
     { id: 42, name: 'Helmut' }
+  ],
+  pages: [
+    { id: 100, slug: 'a' },
+    { id: 101, slug: 'b' },
+    { id: 102, slug: 'c' },
   ]
 };
 
@@ -33,6 +39,8 @@ beforeEach(function () {
     $http.when( 'GET', API_BASE_PATH + '/users/712' ).respond(200, resourcesMock.users[2]);
     $http.when( 'GET', API_BASE_PATH + '/users/42' ).respond(200, resourcesMock.users[3]);
 
+    $http.when( 'GET', API_BASE_PATH + '/users_wrong/512' ).respond(404, ERROR_MESSAGE );
+
     var collection = [
       resourcesMock.users[1],
       resourcesMock.users[3],
@@ -40,6 +48,7 @@ beforeEach(function () {
     ];
 
     $http.when( 'GET', API_BASE_PATH + '/users?id[]=12&id[]=42&id[]=712').respond(200, collection);
+    $http.when( 'GET', API_BASE_PATH + '/pages?slug[]=a&slug[]=b&slug[]=c').respond(200, resourcesMock.pages);
   });
 
 });
@@ -56,56 +65,45 @@ describe('ResourceConfigurationProvider', function() {
 
 });
 
-describe('Resource', function() {
+describe('ResourceService', function() {
 
-  describe('# one resource', function() {
+  describe('#one', function() {
 
-    describe('meta info', function() {
+    describe('return object (Resource)', function() {
 
       var resource;
 
       beforeEach(function() {
-        resource = Resource('/[users]/[:id]', { id: 512 });
+        resource = Resource('books/:id/pages/:page', { id: 424, page: 12 }).one('pages');
       });
 
-      it ('holds correct cache info', function() {
-        expect(resource.__cache.resourceName).toEqual('users');
-        expect(resource.__cache.resourceId).toEqual(512);
-        expect(resource.__cache.key).toEqual('users/512');
+      it ('holds the correct resource name', function() {
+        expect(resource.$_resourceName).toEqual('pages');
+      });
+
+      it ('holds the correct url', function() {
+        expect(resource.$_url).toEqual(API_BASE_PATH + '/books/424/pages/12');
       });
 
       it ('holds an object as data', function() {
         expect(resource.data).toEqual(jasmine.any(Object));
-        expect(resource._type).toEqual('object');
       });
 
-      it ('as default it is not ready', function() {
-        expect(resource.ready).toBe(false);
-      });
-
-      it ('as default it does not contain any errors', function() {
-        expect(resource.error).toBe(null);
-      });
-
-      it ('as default it is not empty (because we dont know yet)', function() {
-        expect(resource.isEmpty()).toBe(false);
-      });
-
-      it ('sets a timestamp', function() {
-        expect(resource._updatedTimestamp).toEqual(jasmine.any(Number));
-        expect(resource._createdTimestamp).toEqual(jasmine.any(Number));
-        expect(resource._createdTimestamp).not.toEqual(0);
-        expect(resource._updatedTimestamp).not.toEqual(0);
+      it ('has a timestamp', function() {
+        expect(resource.$_updatedTimestamp).toEqual(jasmine.any(Number));
+        expect(resource.$_createdTimestamp).toEqual(jasmine.any(Number));
+        expect(resource.$_createdTimestamp).not.toEqual(0);
+        expect(resource.$_updatedTimestamp).not.toEqual(0);
       });
 
     });
 
-    describe('requests', function() {
+    describe('#fetch', function() {
 
       var resource;
 
       beforeEach(function() {
-        resource = Resource('/[users]/[:id]', { id: 512 });
+        resource = Resource('/users/:id', { id: 512 }).one('users');
       });
 
       beforeEach(function() {
@@ -118,34 +116,37 @@ describe('Resource', function() {
         $http.verifyNoOutstandingRequest();
       });
 
-      it ('fetches a single resource from the server', function() {
+      it ('a single resource from the server', function() {
         expect(resource.data.id).toEqual(512);
         expect(resource.data.name).toEqual('Henry');
       });
 
-      it ('doesnt send a http request when resource is already cached', function() {
-        var another_resource = Resource('/[users]/[:id]', { id: 512 });
+      it ('are not needed when resource is already cached', function() {
+        var another_resource = Resource('/users/:id', { id: 512 }).one('users');
         expect(another_resource.data.id).toEqual(512);
         expect(another_resource.data.name).toEqual('Henry');
       });
 
-      it ('but it can also force a request', function() {
-        var another_resource = Resource('/[users]/[:id]', { id: 512 });
-        another_resource.fetch();
+      it ('can be forced although we have it cached', function() {
+        var result;
+        var another_resource = Resource('/users/:id', { id: 512 }).one('users');
+        another_resource.fetch(function(fResult) { result = fResult; }, null, true);
         $http.expect( 'GET', API_BASE_PATH + '/users/512' );
         $http.flush();
         expect(another_resource.data.id).toEqual(512);
         expect(another_resource.data.name).toEqual('Henry');
+        expect(result.data.id).toEqual(512);
+        expect(result.data.name).toEqual('Henry');
       });
 
     });
 
-    describe('promised requests', function() {
+    describe('#fetch with callback', function() {
 
       var result;
 
       beforeEach(function() {
-        Resource('/[users]/[:id]', { id: 12 }).promise().then(function(pResult) {
+        Resource('/:name/:id', { id: 12, name: 'users' }).one('users').fetch(function(pResult) {
           result = pResult;
         });
         $http.expect( 'GET', API_BASE_PATH + '/users/12' );
@@ -164,22 +165,116 @@ describe('Resource', function() {
 
     });
 
-  });
-
-  describe('# all resources', function() {
-
-    describe('meta info', function() {
+    describe('#isReady', function() {
 
       var resource;
 
       beforeEach(function() {
-        resource = Resource('/[users]/', null, { isArray: true });
+        resource = Resource('users/:id', { id: 512 }).one('users');
       });
 
-      it ('holds correct cache info', function() {
-        expect(resource.__cache.resourceName).toEqual('users');
-        expect(resource.__cache.resourceId).toEqual(undefined);
-        expect(resource.__cache.key).toEqual('users');
+      it ('returns false at the beginning', function() {
+        expect(resource.isReady()).toBe(false);
+      });
+
+      it ('returns true after successful server fetch', function() {
+        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+        $http.flush();
+        expect(resource.isReady()).toBe(true);
+      });
+
+    });
+
+    describe('#isEmpty', function() {
+
+      var resource;
+
+      beforeEach(function() {
+        resource = Resource('users/:id', { id: 512 }).one('users');
+      });
+
+      it ('returns false at the beginning (because we dont know)', function() {
+        expect(resource.isEmpty()).toBe(false);
+      });
+
+      it ('returns false after successful server fetch', function() {
+        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+        $http.flush();
+        expect(resource.isEmpty()).toBe(false);
+      });
+
+    });
+
+    describe('#isError', function() {
+
+      describe('with successful server request', function() {
+
+        var resource;
+
+        beforeEach(function() {
+          resource = Resource('users/:id', { id: 512 }).one('users');
+        });
+
+        it ('returns false at the beginning', function() {
+          expect(resource.isError()).toBe(false);
+        });
+
+        it ('returns false after successful server fetch', function() {
+          $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+          $http.flush();
+          expect(resource.isError()).toBe(false);
+        });
+
+      });
+
+      describe('with errror server request', function() {
+
+        var resource;
+
+        beforeEach(function() {
+          resource = Resource('users_wrong/:id', { id: 512 }).one('users');
+        });
+
+        it ('returns true after wrong server fetch', function() {
+          $http.expect( 'GET', API_BASE_PATH + '/users_wrong/512' );
+          $http.flush();
+          expect(resource.isError()).toBe(true);
+        });
+
+      });
+
+    });
+
+    describe('#message', function() {
+
+      var resource;
+
+      beforeEach(function() {
+        resource = Resource('users_wrong/:id', { id: 512 }).one('users');
+      });
+
+      it ('returns the first message after wrong server fetch', function() {
+        $http.expect( 'GET', API_BASE_PATH + '/users_wrong/512' );
+        $http.flush();
+        expect(resource.message()).toEqual(ERROR_MESSAGE);
+      });
+
+    });
+
+  });
+
+  describe('#all', function() {
+
+    describe('return object (Resource)', function() {
+
+      var resource;
+
+      beforeEach(function() {
+        resource = Resource('/users/').all('users');
+      });
+
+      it ('holds correct resource name', function() {
+        expect(resource.$_resourceName).toEqual('users');
       });
 
       it ('holds array data', function() {
@@ -188,12 +283,12 @@ describe('Resource', function() {
 
     });
 
-    describe('request', function() {
+    describe('#fetch', function() {
 
       var resource;
 
       beforeEach(function() {
-        resource = Resource('/[users]/', null, { isArray: true });
+        resource = Resource('/users/').all('users');
         $http.expect( 'GET', API_BASE_PATH + '/users/' );
         $http.flush();
       });
@@ -203,12 +298,12 @@ describe('Resource', function() {
         $http.verifyNoOutstandingRequest();
       });
 
-      it ('fetches all resources from the server', function() {
+      it ('fetch all resources from the server', function() {
         expect(resource.data).toEqual(resourcesMock.users);
       });
 
-      it ('populates the cache for further single resource requests', function() {
-        var another_resource = Resource('/[users]/[:id]', { id: 42 });
+      it ('populate the cache for further single resource requests', function() {
+        var another_resource = Resource('/users/:id', { id: 42 }).one('users');
         expect(another_resource.data.id).toEqual(42);
         expect(another_resource.data.name).toEqual('Helmut');
       });
@@ -217,21 +312,18 @@ describe('Resource', function() {
 
   });
 
-  describe('# collection resources', function() {
+  describe('#collection', function() {
 
-    describe('meta info', function() {
+    describe('return object (Resource)', function() {
 
       var resource;
 
       beforeEach(function() {
-        resource = Resource('/[users]{:id}', { id: [42, 712, 12, 712] });
+        resource = Resource('/users').collection('users', [ 42, 712, 12, 712 ]);
       });
 
-      it ('holds correct cache info', function() {
-        expect(resource.__cache.resourceName).toEqual('users');
-        expect(resource.__cache.resourceId).toEqual(undefined);
-        expect(resource.__cache.collection).toEqual([12, 42, 712]);
-        expect(resource.__cache.collectionKey).toEqual('id');
+      it ('holds correct resource name', function() {
+        expect(resource.$_resourceName).toEqual('users');
       });
 
       it ('holds array data', function() {
@@ -240,12 +332,12 @@ describe('Resource', function() {
 
     });
 
-    describe('request', function() {
+    describe('requests', function() {
 
       var resource;
 
       beforeEach(function() {
-        resource = Resource('/[users]{:id}', { id: [42, 712, 12, 712] });
+        resource = Resource('/users').collection('users', [ 42, 712, 12, 712 ]);
         $http.expect( 'GET', API_BASE_PATH + '/users?id[]=12&id[]=42&id[]=712' );
         $http.flush();
       });
@@ -255,18 +347,42 @@ describe('Resource', function() {
         $http.verifyNoOutstandingRequest();
       });
 
-      it ('fetches a resource collection from the server', function() {
+      it ('fetch a resource collection from the server', function() {
         expect(resource.data[0]).toEqual(resourcesMock.users[1]);
         expect(resource.data[1]).toEqual(resourcesMock.users[3]);
         expect(resource.data[2]).toEqual(resourcesMock.users[2]);
         expect(resource.data[3]).toEqual(undefined);
       });
 
-      it ('populates the cache correctly so we can access single resources directly', function() {
-        var single_resource = Resource('/[users]/[:id]', { id: 712 });
+      it ('populate the cache correctly so we can access single resources directly', function() {
+        var single_resource = Resource('/users/:id', { id: 712 }).one('users');
         expect(single_resource.data.name).toEqual('Paul');
-        var another_single_resource = Resource('/[users]/[:id]', { id: 12 });
+        var another_single_resource = Resource('/users/:id', { id: 12 }).one('users');
         expect(another_single_resource.data.name).toEqual('Peter');
+      });
+
+    });
+
+    describe('requests with individual collection key', function() {
+
+      var resource;
+
+      beforeEach(function() {
+        resource = Resource('/pages').collection('pages', [ 'a', 'b', 'c' ], 'slug');
+        $http.expect( 'GET', API_BASE_PATH + '/pages?slug[]=a&slug[]=b&slug[]=c' );
+        $http.flush();
+      });
+
+      afterEach(function() {
+        $http.verifyNoOutstandingExpectation();
+        $http.verifyNoOutstandingRequest();
+      });
+
+      it ('populate the cache correctly so we can access single resources directly', function() {
+        var single_resource = Resource('/pages/:id', { id: 100 }).one('pages');
+        expect(single_resource.data.slug).toEqual('a');
+        var another_single_resource = Resource('/pages/:id', { id: 102 }).one('pages');
+        expect(another_single_resource.data.slug).toEqual('c');
       });
 
     });

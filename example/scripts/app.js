@@ -5,42 +5,31 @@
 var app = angular.module('app', [ 'ngWatchResource' ]);
 
 app.config(function(ResourceConfigurationProvider) {
-  ResourceConfigurationProvider.setBasePath('https://api.soundcloud.com');
+  ResourceConfigurationProvider.setBasePath('https://api.soundcloud.com/');
   ResourceConfigurationProvider.setDefaultParams({ 'client_id': 'YOUR_CLIENT_ID' });
 });
 
-app.filter('timestampToDate', function() {
-  return function(sTimestamp){
-    var date = new Date(sTimestamp);
-    return date.toLocaleTimeString();
-  };
-});
-
-app.controller('AppCtrl', ['$scope', 'User', function($scope, User)
+app.controller('AppCtrl', ['$scope', '$timeout', 'Resource', function($scope, $timeout, Resource)
 {
-  var _userId = 2122;
+  var _selectedUserId = 545316;
 
-  $scope.hello = 'Yo Soundcloud.';
-
-  $scope.app = {
-    user: null,
-    followers: null
+  $scope.selectUser = function(uId) {
+    _selectedUserId = uId;
   };
 
-  $scope.app.goToUser = function(uId) {
-    _userId = uId;
-  };
+  $scope.user = null;
+  $scope.followings = null;
 
   $scope.$watch(function() {
-    return User.one({ id: _userId });
-  }, function(rUser) {
-    $scope.app.user = rUser;
+    return Resource('/users/:id', { id: _selectedUserId }).one('users');
+  }, function(rData) {
+    $scope.user = rData;
   });
 
   $scope.$watch(function() {
-    return User.followers({ id: _userId });
-  }, function(rUserFollowers) {
-    $scope.app.followers = rUserFollowers;
+    return Resource('/users/:id/followings', { id: _selectedUserId }).all('users');
+  }, function(rData) {
+    $scope.followings = rData;
   });
 
 }]);

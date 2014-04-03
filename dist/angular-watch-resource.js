@@ -1,48 +1,6 @@
-/*! angular-watch-resource.js 01-04-2014 */
+/*! angular-watch-resource.js 03-04-2014 */
 (function(window, angular, undefined) {
   "use strict";
-  function _now() {
-    var now = new Date();
-    return now.getTime();
-  }
-  function _hash(hStr) {
-    var hash, i, len;
-    hash = 0;
-    len = hStr.length;
-    if (len === 0) {
-      return hash;
-    }
-    for (i = 0; i < len; i++) {
-      hash = (hash << 5) - hash + hStr.charCodeAt(i);
-      hash = hash & hash;
-    }
-    return hash.toString();
-  }
-  function _serialize(sParams) {
-    var paramArray, serialized;
-    paramArray = [];
-    serialized = "";
-    angular.forEach(Object.keys(sParams), function(pKey) {
-      if (sParams.hasOwnProperty(pKey)) {
-        if (angular.isArray(sParams[pKey])) {
-          angular.forEach(sParams[pKey], function(eArrayItem) {
-            paramArray.push(encodeURIComponent(pKey) + "[]=" + eArrayItem);
-          });
-        } else {
-          paramArray.push(encodeURIComponent(pKey) + "=" + encodeURIComponent(sParams[pKey]));
-        }
-      }
-    });
-    if (paramArray.length > 0) {
-      serialized = "?" + paramArray.join("&");
-    }
-    return serialized;
-  }
-  function _unique(cArray) {
-    return cArray.filter(function(value, index, self) {
-      return self.indexOf(value) === index;
-    });
-  }
   var ngWatchResource = angular.module("ngWatchResource", []);
   ngWatchResource.provider("ResourceConfiguration", [ function() {
     var _configuration = {
@@ -83,229 +41,448 @@
     };
     return ResourceConfiguration;
   } ]);
-  ngWatchResource.factory("Resource", [ "$cacheFactory", "$http", "$q", "$interval", "ResourceConfiguration", function($cacheFactory, $http, $q, $interval, ResourceConfiguration) {
-    var _cache = $cacheFactory("resourceCache");
-    var _cacheHandler = {
-      optimizeCollection: function(hCacheInfo) {
-        var optimized = {
-          cached: [],
-          remote: []
-        };
-        var cacheKey;
-        angular.forEach(hCacheInfo.collection, function(cItem) {
-          cacheKey = hCacheInfo.resourceName + "/" + cItem;
-          if (_cache.get(cacheKey) && _cache.get(cacheKey).ready) {
-            optimized.cached.push(_cache.get(cacheKey).data);
-          } else {
-            optimized.remote.push(cItem);
-          }
-        });
-        return optimized;
-      },
-      populate: function(hCacheInfo, hResources) {
-        var cacheKey, resource, path;
-        angular.forEach(hResources, function(cItem) {
-          if ("id" in cItem) {
-            cacheKey = hCacheInfo.resourceName + "/" + cItem.id;
-            path = new Path(cacheKey, null);
-            resource = new Resource(cacheKey, {}, path.cache);
-            resource.setReady(cItem);
-            _cache.put(cacheKey, resource);
-          }
-        });
-        return true;
-      }
+  ngWatchResource.factory("Resource", [ "$cacheFactory", "$http", "$q", "$timeout", "ResourceConfiguration", function($cacheFactory, $http, $q, $timeout, ResourceConfiguration) {
+    var ID_KEY = "id";
+    var DEFAULT_COLLECTION_KEY = "id";
+    var DEFAULT_ARRAY = [];
+    var DEFAULT_OBJECT = {};
+    var TYPE_ALL = 0;
+    var TYPE_ONE = 1;
+    var TYPE_COLLECTION = 2;
+    var STATUS_INITALIZED = 10;
+    var STATUS_LOADING = 20;
+    var STATUS_FETCHED = 30;
+    var STATUS_ERROR = 40;
+    var defaultOptions = {
+      silent: false,
+      withCredentials: false,
+      responseType: "json",
+      method: "GET",
+      data: angular.copy(ResourceConfiguration.defaultData),
+      params: angular.copy(ResourceConfiguration.defaultParams),
+      headers: angular.copy(ResourceConfiguration.defaultHeaders)
     };
-    function Path(rUrl, rValues) {
-      this.url = rUrl;
-      this.values = rValues;
-      this.cache = {
-        key: null,
-        collectionKey: null,
-        collection: [],
-        resourceName: undefined,
-        resourceId: undefined
-      };
-    }
-    Path.prototype.build = function() {
-      var _this, url, cacheKeys, cacheCollectionKey;
-      _this = this;
-      cacheCollectionKey = this.url.match(/\{([^\}]+)\}/);
-      if (cacheCollectionKey) {
-        this.cache.collectionKey = cacheCollectionKey[1].replace(":", "");
-        if (!(this.cache.collectionKey in this.values && angular.isArray(this.values[this.cache.collectionKey]))) {
-          throw "ngWatchResource Error: collection key given but does not point to an array";
-        }
-        this.cache.collection = _unique(this.values[this.cache.collectionKey]);
-      }
-      url = this.url.replace(/\\:/g, ":");
-      url = url.replace(/\{([^\}]+)\}/, "");
-      if (this.values) {
-        angular.forEach(Object.keys(this.values), function(eKey) {
-          url = url.replace(new RegExp(":" + eKey, "g"), _this.values[eKey]);
-        });
-      }
-      cacheKeys = url.match(/\[([^\]]+)\]/g);
-      if (cacheKeys && cacheKeys.length > 0) {
-        this.cache.key = cacheKeys.join("/").replace(/[\[\]]/g, "");
-        var split = this.cache.key.split("/");
-        this.cache.resourceName = split[0];
-        if (cacheKeys.length > 1) {
-          this.cache.resourceId = parseInt(split[1], 10);
-        }
-      }
-      if (!cacheKeys && this.cache.collectionKey) {
-        throw "ngWatchResource Error: collection key but no resouce name given";
-      }
-      url = url.replace(/[\[\]]/g, "");
-      return url;
+    var __debug = {};
+    var _ = {};
+    _.unique = function(cArray) {
+      return cArray.filter(function(value, index, self) {
+        return self.indexOf(value) === index;
+      });
     };
-    function Resource(rCacheKey, rOptions, rCache) {
-      var _this = this;
-      this.__promise = $q.defer();
-      this.__options = rOptions;
-      this.__interval = null;
-      this.__cache = rCache;
-      this._createdTimestamp = _now();
-      this._updatedTimestamp = this._createdTimestamp;
-      this._type = rOptions.isArray ? "array" : "object";
-      this.data = rOptions.isArray ? [] : {};
-      this.ready = false;
-      this.error = null;
-      if (rOptions.interval !== 0) {
-        this.__interval = $interval(function() {
-          _this.fetch(true);
-        }, rOptions.interval);
+    _.hash = function(hString) {
+      var hash, i, len;
+      hash = 0;
+      len = hString.length;
+      if (len === 0) {
+        return hash;
       }
-    }
-    Resource.prototype = {
-      promise: function() {
-        return this.__promise.promise;
-      },
-      stopInterval: function() {
-        $interval.cancel(this.__interval);
-        return true;
-      },
-      fetch: function(fDisableOptimization) {
-        var _this = this, params, concatResult;
-        this.__promise = $q.defer();
-        params = this.__options.params;
-        concatResult = false;
-        if (!fDisableOptimization) {
-          if (this.__cache.collectionKey && this.__cache.collection.length > 0) {
-            var optimized = _cacheHandler.optimizeCollection(this.__cache);
-            params = this.__options.params;
-            params[this.__cache.collectionKey] = optimized.remote;
-            this.data = optimized.cached;
-            if (optimized.remote.length === 0) {
-              this.__promise.resolve(this);
-              return true;
+      for (i = 0; i < len; i++) {
+        hash = (hash << 5) - hash + hString.charCodeAt(i);
+        hash = hash & hash;
+      }
+      return hash.toString();
+    };
+    _.update = function(eSource, eDestination) {
+      var extended = angular.copy(eSource);
+      if (eDestination) {
+        angular.forEach(Object.keys(eDestination), function(oKey) {
+          if (oKey in extended && typeof extended[oKey] === typeof eDestination[oKey]) {
+            if (angular.isObject(extended[oKey])) {
+              extended[oKey] = angular.extend(extended[oKey], eDestination[oKey]);
+            } else {
+              extended[oKey] = eDestination[oKey];
             }
-            concatResult = true;
           }
-        }
-        var request = {
-          method: this.__options.method,
-          url: this.__options.url + _serialize(params),
-          data: this.__options.data,
-          headers: this.__options.headers,
-          withCredentials: this.__options.withCredentials,
-          responseType: this.__options.responseType,
-          cache: false
-        };
-        $http(request).success(function(rData) {
-          _this.setReady(rData, true, concatResult);
-          _cache.put(_this.__cache.key, _this);
-          _this._updatedTimestamp = _now();
-          if (_this.__cache.resourceName && _this._type === "array") {
-            _cacheHandler.populate(_this.__cache, rData);
-          }
-          _this.__promise.resolve(_this);
-        }).error(function(rErrorData) {
-          _this.setError(rErrorData);
-          _this.__promise.reject(_this);
         });
-      },
-      setReady: function(sData, sReadyValue, sConcat) {
-        if (sConcat && angular.isArray(this.data)) {
-          this.data = this.data.concat(sData);
+      }
+      return extended;
+    };
+    _.now = function() {
+      var date = new Date();
+      return date.getTime();
+    };
+    _.isEmpty = function(eTarget) {
+      if (eTarget) {
+        if (angular.isArray(eTarget)) {
+          return angular.equals(DEFAULT_ARRAY, eTarget);
         } else {
-          this.data = sData;
+          return angular.equals(DEFAULT_OBJECT, eTarget);
         }
-        this.error = null;
-        this.ready = sReadyValue || true;
-        return this.ready;
-      },
-      setError: function(sErrorData) {
-        this.error = sErrorData;
-        this.ready = false;
+      } else {
         return true;
+      }
+    };
+    _.pluck = function(eCollection, eIdentifier) {
+      var values = [];
+      angular.forEach(eCollection, function(eItem) {
+        if (eIdentifier in eItem) {
+          values.push(eItem[eIdentifier]);
+        }
+      });
+      return values;
+    };
+    _.serialize = function(sParams) {
+      var paramArray, serialized;
+      paramArray = [];
+      serialized = "";
+      angular.forEach(Object.keys(sParams), function(pKey) {
+        if (sParams.hasOwnProperty(pKey)) {
+          if (angular.isArray(sParams[pKey])) {
+            angular.forEach(sParams[pKey], function(eArrayItem) {
+              paramArray.push(encodeURIComponent(pKey) + "[]=" + eArrayItem);
+            });
+          } else {
+            paramArray.push(encodeURIComponent(pKey) + "=" + encodeURIComponent(sParams[pKey]));
+          }
+        }
+      });
+      if (paramArray.length > 0) {
+        serialized = "?" + paramArray.join("&");
+      }
+      return serialized;
+    };
+    var Cache = function(cName) {
+      __debug[cName] = {};
+      this.name = cName;
+      this.storage = $cacheFactory(cName);
+    };
+    Cache.prototype = {
+      exists: function(pCacheKey) {
+        return angular.isDefined(this.storage.get(pCacheKey));
       },
-      set: function(sKey, sValue) {
-        this._updatedTimestamp = _now();
-        this.data[sKey] = sValue;
-        return true;
+      get: function(pCacheKey) {
+        return this.storage.get(pCacheKey);
       },
-      get: function(sKey) {
-        return this.data[sKey];
+      set: function(pCacheKey, pCacheData) {
+        __debug[this.name][pCacheKey] = pCacheData;
+        return this.storage.put(pCacheKey, pCacheData);
       },
-      isEmpty: function() {
-        if (this._type === "array" && this.ready) {
-          return this.data.length === 0;
-        } else if (this._type === "object" && this.ready) {
-          return Object.keys(this.data).length === 0;
-        } else {
+      update: function(pCacheKey, pCacheData) {
+        var data = this.get(pCacheKey);
+        data.$_updatedTimestamp = _.now();
+        data.data = pCacheData;
+        return this.storage.put(pCacheKey, data);
+      }
+    };
+    var resourceCache = new Cache("__resourceCache");
+    var atomicCache = new Cache("__atomicCache");
+    var CacheUtils = {};
+    CacheUtils.Resource = {
+      buildData: function(rPointer, rAtomicCacheKeys) {
+        var data;
+        if (rAtomicCacheKeys.length === 0) {
           return false;
         }
+        if (rPointer._data.type === TYPE_ONE) {
+          data = atomicCache.get(rAtomicCacheKeys[0]).data;
+        } else {
+          data = [];
+          angular.forEach(rAtomicCacheKeys, function(aKey) {
+            data.push(atomicCache.get(aKey).data);
+          });
+        }
+        resourceCache.update(rPointer.cacheKey, data);
+        return true;
       }
     };
-    function watchResource(rPath, rVars, rOptions) {
-      var options = {
-        isArray: false,
-        withCredentials: false,
-        responseType: "json",
-        method: "GET",
-        interval: 0,
-        data: angular.copy(ResourceConfiguration.defaultData),
-        params: angular.copy(ResourceConfiguration.defaultParams),
-        headers: angular.copy(ResourceConfiguration.defaultHeaders)
+    CacheUtils.Atomic = {
+      _insertData: function(cResourceName, cObject) {
+        if (!(ID_KEY in cObject)) {
+          throw "CacheUtilsError: cant find ID key in object.";
+        }
+        var pointer = new ResourcePointer().build(cResourceName, cObject[ID_KEY]);
+        pointer.parseCacheKey();
+        if (!atomicCache.exists(pointer.cacheKey)) {
+          var atomic = new AtomicResource(cResourceName, cObject[ID_KEY]);
+          atomicCache.set(pointer.cacheKey, atomic);
+        }
+        atomicCache.update(pointer.cacheKey, cObject);
+        return pointer.cacheKey;
+      },
+      cacheKeyArray: function(cDataArray, cResourceName) {
+        var cacheKeys = [];
+        angular.forEach(cDataArray, function(dItem) {
+          var pointer = new ResourcePointer().build(cResourceName, dItem);
+          cacheKeys.push(pointer.parseCacheKey());
+        });
+        return cacheKeys;
+      },
+      findUncached: function(cDataArray, cResourceName) {
+        return cDataArray.filter(function(eIdItem) {
+          var pointer = new ResourcePointer().build(cResourceName, eIdItem);
+          pointer.parseCacheKey();
+          return !atomicCache.exists(pointer.cacheKey);
+        });
+      },
+      populateCache: function(cOptions, cResourceName, cObject) {
+        var _this = this;
+        var atomicCacheKeys = [];
+        if (angular.isArray(cObject)) {
+          angular.forEach(cObject, function(eItem) {
+            atomicCacheKeys.push(_this._insertData(cResourceName, eItem));
+          });
+        } else {
+          atomicCacheKeys.push(this._insertData(cResourceName, cObject));
+        }
+        return atomicCacheKeys;
+      }
+    };
+    var AtomicResource = function(rResourceName, rId) {
+      this._createdTimestamp = _.now();
+      this._updatedTimestamp = this._createdTimestamp;
+      this._resourceName = rResourceName;
+      this._resourceId = rId;
+      this.data = DEFAULT_OBJECT;
+    };
+    var ResourcePointer = function(rPath, rVars, rData) {
+      this._path = rPath || "";
+      this._vars = rVars || {};
+      this._data = rData || {
+        type: TYPE_ONE
       };
-      if (rOptions && typeof rOptions === "object") {
-        angular.forEach(Object.keys(rOptions), function(oKey) {
-          if (oKey in options && typeof options[oKey] === typeof rOptions[oKey]) {
-            if (angular.isObject(options[oKey])) {
-              options[oKey] = angular.extend(options[oKey], rOptions[oKey]);
-            } else {
-              options[oKey] = rOptions[oKey];
-            }
-          }
+      this.cacheKey = undefined;
+      this.resourcePath = "";
+    };
+    ResourcePointer.prototype.isCollection = function() {
+      return this._data.type === TYPE_COLLECTION;
+    };
+    ResourcePointer.prototype.build = function(rResourceName, rId) {
+      this._path = rResourceName + "/:id";
+      this._vars[ID_KEY] = rId;
+      return this;
+    };
+    ResourcePointer.prototype.parseCacheKey = function() {
+      var path = this._path;
+      var _this = this;
+      path = path.replace(/\\:/g, ":");
+      if (this._vars) {
+        angular.forEach(Object.keys(_this._vars), function(vKey) {
+          path = path.replace(new RegExp(":" + vKey, "g"), _this._vars[vKey]);
         });
       }
-      var cacheKey, url, resource;
-      var path = new Path(rPath, rVars);
-      url = ResourceConfiguration.basePath + path.build();
-      if (path.cache.key) {
-        if (path.cache.collectionKey) {
-          var collection = path.cache.collection.sort();
-          cacheKey = _hash(collection.join("."));
-          options.params[path.cache.collectionKey] = collection;
-          options.isArray = true;
+      if (path[0] !== "/") {
+        path = "/" + path;
+      }
+      this.resourcePath = path;
+      if (this.isCollection()) {
+        var hashed = _.hash(this._data.collectionArray.join("."));
+        path = path + "?" + this._data.collectionKey + "=" + hashed;
+      }
+      this.cacheKey = path;
+      return this;
+    };
+    ResourcePointer.prototype.serializeUrl = function(sParams, sOptimizedCollectionArray) {
+      var params, serialized;
+      params = sParams;
+      if (this.isCollection()) {
+        var collection = {};
+        if (this._data.collectionKey in sParams) {
+          throw "ResourcePointerError: collection key already exists as parameter";
+        }
+        if (sOptimizedCollectionArray) {
+          collection[this._data.collectionKey] = sOptimizedCollectionArray;
         } else {
-          cacheKey = path.cache.key;
+          collection[this._data.collectionKey] = this._data.collectionArray;
+        }
+        params = angular.extend(collection, sParams);
+      }
+      serialized = _.serialize(params);
+      var basePath = ResourceConfiguration.basePath;
+      if (basePath[basePath.length - 1] === "/") {
+        basePath = basePath.slice(0, basePath.length - 1);
+      }
+      return basePath + this.resourcePath + serialized;
+    };
+    var RequestUtils = {};
+    RequestUtils.build = function(rPointer, rOptions) {
+      var url = rPointer.serializeUrl(rOptions.params);
+      var request = {
+        method: rOptions.method,
+        url: url,
+        data: rOptions.data,
+        headers: rOptions.headers,
+        withCredentials: rOptions.withCredentials,
+        responseType: rOptions.responseType,
+        cache: false
+      };
+      return request;
+    };
+    RequestUtils.optimize = function(rRequest, rPointer, rOptions, rResourceName) {
+      var optimized = {};
+      var requestNotNeeded = false;
+      var cachedAtomicKeys = [];
+      if (rPointer._data.type === TYPE_COLLECTION) {
+        var optimizedCollection = CacheUtils.Atomic.findUncached(rPointer._data.collectionArray, rResourceName);
+        optimized.url = rPointer.serializeUrl(rOptions.params, optimizedCollection);
+        var cachedIds = rPointer._data.collectionArray.filter(function(dItem) {
+          return optimizedCollection.indexOf(dItem) === -1;
+        });
+        cachedAtomicKeys = CacheUtils.Atomic.cacheKeyArray(cachedIds, rResourceName);
+        if (_.isEmpty(optimizedCollection)) {
+          requestNotNeeded = true;
+        }
+      } else if (rPointer._data.type === TYPE_ONE) {
+        if (atomicCache.exists(rPointer.cacheKey)) {
+          cachedAtomicKeys = [ rPointer.cacheKey ];
+          requestNotNeeded = true;
+        }
+      } else if (rPointer._data.type === TYPE_ALL) {
+        if (resourceCache.get(rPointer.cacheKey).isReady()) {
+          cachedAtomicKeys = _.pluck(resourceCache.get(rPointer.cacheKey).data, ID_KEY);
+          requestNotNeeded = true;
+        }
+      }
+      var request = _.update(rRequest, optimized);
+      return {
+        requestNotNeeded: requestNotNeeded,
+        cachedAtomicKeys: cachedAtomicKeys,
+        request: request
+      };
+    };
+    var Resource = function(rPointer, rResourceName, rOptions) {
+      this.$__meta = {
+        pointer: rPointer,
+        options: rOptions,
+        errors: [],
+        status: STATUS_INITALIZED
+      };
+      this.$_createdTimestamp = _.now();
+      this.$_updatedTimestamp = this.$_createdTimestamp;
+      this.$_requestTimestamp = undefined;
+      this.$_resourceName = rResourceName;
+      this.$_url = rPointer.serializeUrl(rOptions.params);
+      this.data = rPointer._data.type === TYPE_ONE ? DEFAULT_OBJECT : DEFAULT_ARRAY;
+    };
+    Resource.prototype = {
+      fetch: function(fSuccess, fError, fDisableOptimization) {
+        var _this = this;
+        var pointer, options, atomicCacheKeys, request;
+        pointer = this.$__meta.pointer;
+        options = this.$__meta.options;
+        request = RequestUtils.build(pointer, options);
+        if (!fDisableOptimization) {
+          var optimized = RequestUtils.optimize(request, pointer, options, this.$_resourceName);
+          atomicCacheKeys = optimized.cachedAtomicKeys;
+          CacheUtils.Resource.buildData(pointer, atomicCacheKeys);
+          if (optimized.requestNotNeeded) {
+            this.$__meta.status = STATUS_FETCHED;
+            if (fSuccess && angular.isFunction(fSuccess)) {
+              fSuccess(this);
+            }
+            return this;
+          } else {
+            request = optimized.request;
+          }
+        }
+        this.$__meta.status = STATUS_LOADING;
+        $http(request).then(function(fResult) {
+          atomicCacheKeys = CacheUtils.Atomic.populateCache(options, _this.$_resourceName, fResult.data);
+          CacheUtils.Resource.buildData(pointer, atomicCacheKeys);
+          _this.$_requestTimestamp = _.now();
+          _this.$__meta.status = STATUS_FETCHED;
+          if (fSuccess && angular.isFunction(fSuccess)) {
+            fSuccess(_this);
+          }
+        }, function(fError) {
+          _this.$__meta.status = STATUS_ERROR;
+          _this.$__meta.errors.push(fError.data);
+          if (fError && angular.isFunction(fError)) {
+            fError(_this);
+          }
+        });
+        return this;
+      },
+      isError: function() {
+        return this.$__meta.status === STATUS_ERROR;
+      },
+      isReady: function() {
+        return this.$__meta.status === STATUS_FETCHED;
+      },
+      isEmpty: function() {
+        return this.$__meta.status === STATUS_FETCHED && _.isEmpty(this.data);
+      },
+      message: function(mReturnAll) {
+        var errors = this.$__meta.errors;
+        if (errors.length === 0) {
+          return undefined;
+        } else {
+          if (!mReturnAll) {
+            return errors[errors.length - 1];
+          } else {
+            return errors;
+          }
+        }
+      }
+    };
+    var ResourceFactory = function(rPath, rVars, rResourceName, rOptions, rData) {
+      var pointer, data, resource;
+      data = rData;
+      if (data.type === TYPE_COLLECTION) {
+        data.collectionArray = _.unique(data.collectionArray).sort();
+      }
+      pointer = new ResourcePointer(rPath, rVars, data).parseCacheKey();
+      if (!resourceCache.exists(pointer.cacheKey)) {
+        var options = _.update(defaultOptions, rOptions);
+        resource = new Resource(pointer, rResourceName, options);
+        resourceCache.set(pointer.cacheKey, resource);
+        if (!options.silent) {
+          resource.fetch(false);
         }
       } else {
-        cacheKey = _hash(url);
-      }
-      options.url = url;
-      if (!_cache.get(cacheKey)) {
-        resource = new Resource(cacheKey, options, path.cache);
-        _cache.put(cacheKey, resource);
-        resource.fetch();
-      } else {
-        resource = _cache.get(cacheKey);
+        resource = resourceCache.get(pointer.cacheKey);
       }
       return resource;
-    }
-    return watchResource;
+    };
+    var ResourceService = function(rPath, rVars) {
+      var vars = rVars || {};
+      function _delegate(rResourceName, rOptions, rData) {
+        var options;
+        if (!rPath) {
+          throw "ResourceServiceError: path is missing";
+        }
+        if (!angular.isObject(vars)) {
+          throw "ResourceServiceError: path vars parameter must be an object";
+        }
+        if (!(rResourceName && typeof rResourceName === "string")) {
+          throw "ResourceServiceError: resource name is missing or is not a string";
+        }
+        options = rOptions || {};
+        if (!angular.isObject(vars)) {
+          throw "ResourceServiceError: options parameter must be an object";
+        }
+        return ResourceFactory(rPath, vars, rResourceName, options, rData);
+      }
+      return {
+        all: function(rResourceName, rOptions) {
+          return _delegate(rResourceName, rOptions, {
+            type: TYPE_ALL
+          });
+        },
+        one: function(rResourceName, rOptions) {
+          return _delegate(rResourceName, rOptions, {
+            type: TYPE_ONE
+          });
+        },
+        collection: function(rResourceName, rCollection, rCollectionKey, rOptions) {
+          var key;
+          if (!(rCollection && angular.isArray(rCollection))) {
+            throw "ResourceServiceError: collection parameter must be an array and not undefined";
+          }
+          key = rCollectionKey || DEFAULT_COLLECTION_KEY;
+          return _delegate(rResourceName, rOptions, {
+            type: TYPE_COLLECTION,
+            collectionKey: key,
+            collectionArray: rCollection
+          });
+        },
+        manipulate: function() {
+          return false;
+        },
+        debug: function() {
+          return __debug;
+        }
+      };
+    };
+    return ResourceService;
   } ]);
 })(window, window.angular);
