@@ -99,7 +99,7 @@ module.exports = function (grunt) {
     uglify: {
       options: {
         preserveComments: 'some',
-        banner: '/*! <%= npm.name %>.js <%= grunt.template.today("dd-mm-yyyy") %> */\n'
+        banner: '/*! <%= npm.name %>.js v<%= npm.version %> <%= grunt.template.today("dd-mm-yyyy") %> */\n'
       },
       minified: {
         options: {

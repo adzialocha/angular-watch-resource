@@ -1,4 +1,4 @@
-/*! angular-watch-resource.js 04-04-2014 */
+/*! angular-watch-resource.js v0.0.1 04-04-2014 */
 (function(window, angular, undefined) {
   "use strict";
   var ngWatchResource = angular.module("ngWatchResource", []);
