@@ -80,17 +80,18 @@
     /* Globals */
 
     var defaultOptions = {
-      // updateInterval: 0,
+      interval: 0,
       silent: false,
+      sideload: {},
       withCredentials: false,
       responseType: 'json',
-      sideload: {},
       data: angular.copy(ResourceConfiguration.defaultData),
       params: angular.copy(ResourceConfiguration.defaultParams),
       headers: angular.copy(ResourceConfiguration.defaultHeaders)
     };
 
     var _forcedId = FORCED_ID_START;
+    var _intervalJobs = {};
 
     var __debug = {};
 
@@ -201,6 +202,83 @@
       }
 
       return serialized;
+    };
+
+    /* @ IntervalUtils
+     *
+     * handles the frequent update of an resource
+     */
+
+    var IntervalUtils = {};
+
+    // start a $interval, fetching new data in a certain frequency
+
+    IntervalUtils.start = function(rResource, rFrequency) {
+
+      /* jshint camelcase: false */
+
+      var _this = this;
+      var id = rResource.$__meta.pointer.cacheKey;
+      var createNew = false;
+
+      if (! angular.isNumber(rFrequency)) {
+        throw 'IntervalUtils: interval frequency must be a number';
+      }
+
+      // do we need to create a new one (changed frequency)
+
+      if (! (id in _intervalJobs)) {
+        createNew = true;
+      } else {
+        if (_intervalJobs[id].frequency !== rFrequency) {
+          this.stop(rResource);
+          if (rFrequency > 0) {
+            createNew = true;
+          }
+        }
+      }
+
+      if (createNew) {
+
+        _intervalJobs[id] = {
+          frequency: rFrequency,
+          promise: undefined
+        };
+
+        _intervalJobs[id].promise = $interval(function() {
+
+          rResource.fetch(null, function() {
+            // cancel $interval when there is an server error happening
+            _this.stop(rResource);
+          }, true);
+
+        }, rFrequency);
+
+        __debug.__intervals = _intervalJobs;
+      }
+
+      return createNew;
+
+    };
+
+    // stop the $interval
+
+    IntervalUtils.stop = function(rResource) {
+
+      /* jshint camelcase: false */
+
+      var id = rResource.$__meta.pointer.cacheKey;
+
+      if (! (id in _intervalJobs)) {
+        return false;
+      }
+
+      $interval.cancel(_intervalJobs[id].promise);
+      delete _intervalJobs[id];
+      __debug.__intervals = _intervalJobs;
+
+      return true;
+
     };
 
     /* @ Cache
@@ -625,7 +703,9 @@
           }
         }
 
-        this.$__meta.status = STATUS_LOADING;
+        if (! this.isReady()) {
+          this.$__meta.status = STATUS_LOADING;
+        }
 
         // fetch data from the server
 
@@ -646,10 +726,10 @@
             fSuccess(_this);
           }
 
-        }, function(fError) {
+        }, function(fErrorData) {
 
           _this.$__meta.status = STATUS_ERROR;
-          _this.$__meta.errors.push(fError.data);
+          _this.$__meta.errors.push(fErrorData.data);
 
           if (fError && angular.isFunction(fError)) {
             fError(_this);
@@ -658,6 +738,16 @@
         });
 
         return this;
+      },
+
+      // interval update handling
+
+      start: function(sIntervalFrequency) {
+        return IntervalUtils.start(this, sIntervalFrequency);
+      },
+
+      stop: function() {
+        return IntervalUtils.stop(this);
       },
 
       // methods for status handling (for example in view)
@@ -729,6 +819,12 @@
 
         if (! options.silent) {
           resource.fetch(false);
+        }
+
+        // start $interval when given
+
+        if (options.interval > 0) {
+          IntervalUtils.start(resource, options.interval);
         }
 
       } else {

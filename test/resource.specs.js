@@ -28,7 +28,7 @@ var resourcesMock = {
   ]
 };
 
-var Resource, ResourceConfiguration, $http;
+var Resource, ResourceConfiguration, $http, $interval;
 
 beforeEach(function () {
 
@@ -37,10 +37,11 @@ beforeEach(function () {
     ResourceConfigurationProvider.setDefaultHeaders(DEFAULT_HEADERS);
   });
 
-  inject(function (_Resource_, _ResourceConfiguration_, $httpBackend) {
+  inject(function (_Resource_, _ResourceConfiguration_, $httpBackend, _$interval_) {
     Resource = _Resource_;
     ResourceConfiguration = _ResourceConfiguration_;
     $http = $httpBackend;
+    $interval = _$interval_;
 
     $http.when( 'GET', API_BASE_PATH + '/users/' ).respond(200, resourcesMock.users);
 
@@ -441,6 +442,83 @@ describe('ResourceService', function() {
         expect(single_resource.data.slug).toEqual('a');
         var another_single_resource = Resource('/pages/:id', { id: 102 }).one('pages');
         expect(another_single_resource.data.slug).toEqual('c');
+      });
+
+    });
+
+  });
+
+  describe('$interval', function() {
+
+    describe('resource with interval option', function() {
+
+      var resource;
+
+      beforeEach(function() {
+        resource = Resource('/users/:id', { id: 512 }).one('users', {
+          interval: 50
+        });
+        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+        $http.flush();
+      });
+
+      it ('fetches data from the server with every interval step', function() {
+
+        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+        $interval.flush(50);
+        $http.flush();
+        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+        $interval.flush(50);
+        $http.flush();
+        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+        $interval.flush(50);
+        $http.flush();
+
+      });
+
+      it ('resource #stop interval', function() {
+        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+        $interval.flush(50);
+        $http.flush();
+        resource.stop();
+        $interval.flush(50);
+      });
+
+      it ('resource #start interval with new frequency', function() {
+        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+        $interval.flush(50);
+        $http.flush();
+        resource.start(1000);
+        $interval.flush(50);
+        $interval.flush(50);
+        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+        $interval.flush(900);
+        $http.flush();
+      });
+
+    });
+
+    describe('resource #start interval', function() {
+
+      var resource;
+
+      beforeEach(function() {
+        resource = Resource('/users/:id', { id: 512 }).one('users');
+        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+        $http.flush();
+      });
+
+      it ('fetches data from the server with every interval step', function() {
+
+        resource.start(125);
+
+        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+        $interval.flush(125);
+        $http.flush();
+        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+        $interval.flush(125);
+        $http.flush();
+
       });
 
     });

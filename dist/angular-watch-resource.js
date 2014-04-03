@@ -56,15 +56,17 @@
     var STATUS_FETCHED = 30;
     var STATUS_ERROR = 40;
     var defaultOptions = {
+      interval: 0,
       silent: false,
+      sideload: {},
       withCredentials: false,
       responseType: "json",
-      sideload: {},
       data: angular.copy(ResourceConfiguration.defaultData),
       params: angular.copy(ResourceConfiguration.defaultParams),
       headers: angular.copy(ResourceConfiguration.defaultHeaders)
     };
     var _forcedId = FORCED_ID_START;
+    var _intervalJobs = {};
     var __debug = {};
     var _ = {};
     _.unique = function(cArray) {
@@ -143,6 +145,48 @@
         serialized = "?" + paramArray.join("&");
       }
       return serialized;
+    };
+    var IntervalUtils = {};
+    IntervalUtils.start = function(rResource, rFrequency) {
+      var _this = this;
+      var id = rResource.$__meta.pointer.cacheKey;
+      var createNew = false;
+      if (!angular.isNumber(rFrequency)) {
+        throw "IntervalUtils: interval frequency must be a number";
+      }
+      if (!(id in _intervalJobs)) {
+        createNew = true;
+      } else {
+        if (_intervalJobs[id].frequency !== rFrequency) {
+          this.stop(rResource);
+          if (rFrequency > 0) {
+            createNew = true;
+          }
+        }
+      }
+      if (createNew) {
+        _intervalJobs[id] = {
+          frequency: rFrequency,
+          promise: undefined
+        };
+        _intervalJobs[id].promise = $interval(function() {
+          rResource.fetch(null, function() {
+            _this.stop(rResource);
+          }, true);
+        }, rFrequency);
+        __debug.__intervals = _intervalJobs;
+      }
+      return createNew;
+    };
+    IntervalUtils.stop = function(rResource) {
+      var id = rResource.$__meta.pointer.cacheKey;
+      if (!(id in _intervalJobs)) {
+        return false;
+      }
+      $interval.cancel(_intervalJobs[id].promise);
+      delete _intervalJobs[id];
+      __debug.__intervals = _intervalJobs;
+      return true;
     };
     var Cache = function(cName) {
       __debug[cName] = {};
@@ -393,7 +437,9 @@
             request = optimized.request;
           }
         }
-        this.$__meta.status = STATUS_LOADING;
+        if (!this.isReady()) {
+          this.$__meta.status = STATUS_LOADING;
+        }
         $http(request).then(function(fResult) {
           atomicCacheKeys = CacheUtils.Atomic.populateCache(options, _this.$resourceName, fResult.data);
           CacheUtils.Resource.buildData(pointer, atomicCacheKeys);
@@ -402,14 +448,20 @@
           if (fSuccess && angular.isFunction(fSuccess)) {
             fSuccess(_this);
           }
-        }, function(fError) {
+        }, function(fErrorData) {
           _this.$__meta.status = STATUS_ERROR;
-          _this.$__meta.errors.push(fError.data);
+          _this.$__meta.errors.push(fErrorData.data);
           if (fError && angular.isFunction(fError)) {
             fError(_this);
           }
         });
         return this;
+      },
+      start: function(sIntervalFrequency) {
+        return IntervalUtils.start(this, sIntervalFrequency);
+      },
+      stop: function() {
+        return IntervalUtils.stop(this);
       },
       isError: function() {
         return this.$__meta.status === STATUS_ERROR;
@@ -449,6 +501,9 @@
         resourceCache.set(pointer.cacheKey, resource);
         if (!options.silent) {
           resource.fetch(false);
+        }
+        if (options.interval > 0) {
+          IntervalUtils.start(resource, options.interval);
         }
       } else {
         resource = resourceCache.get(pointer.cacheKey);

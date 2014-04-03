@@ -13,14 +13,19 @@
 
   </head>
 
-  <body ng-app="app">
+  <body ng-app="app" ng-cloak>
     <div class="wrapper" ng-controller="AppCtrl">
 
       <h1>User {{ user.data.id }}</h1>
 
       <div ng-switch="user.isReady()">
         <div ng-switch-when="true">
-          <p>{{ user.data.username }}</p>
+          <p><strong>{{ user.data.username }}</strong></p>
+          <p ng-show="user.data.online" style="color: green">is online!</p>
+          <p>{{ user.data.city }} {{ user.data.country }}</p>
+          <p>{{ user.data.website }}</p>
+
+          <p><small>updated @ {{ user.$updatedTimestamp | timestampToDate }}</small></p>
         </div>
         <div ng-switch-when="false">
           <p>Loading data..</p>
