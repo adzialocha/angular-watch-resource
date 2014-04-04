@@ -1,4 +1,4 @@
-/*! angular-watch-resource.js v0.0.1 04-04-2014 */
+/*! angular-watch-resource.js v0.4.0 05-04-2014 */
 (function(window, angular, undefined) {
   "use strict";
   var ngWatchResource = angular.module("ngWatchResource", []);
@@ -9,7 +9,7 @@
       defaultParams: {},
       defaultHeaders: {}
     };
-    var ResourceConfiguration = {
+    var resourceConfiguration = {
       setBasePath: function(bPath) {
         if (bPath && typeof bPath === "string") {
           _configuration.basePath = bPath;
@@ -39,12 +39,14 @@
         };
       }
     };
-    return ResourceConfiguration;
+    return resourceConfiguration;
   } ]);
   ngWatchResource.factory("Resource", [ "$cacheFactory", "$http", "$q", "$interval", "ResourceConfiguration", function($cacheFactory, $http, $q, $interval, ResourceConfiguration) {
     var ID_KEY = "id";
     var FORCED_ID_START = 1;
-    var DEFAULT_METHOD = "GET";
+    var ALLOWED_RETRIEVAL_METHODS = [ "GET", "HEAD" ];
+    var ALLOWED_MANIPULATION_METHOD = [ "PUT", "POST", "DELETE" ];
+    var DEFAULT_MANIPULATION_METHOD = "POST";
     var DEFAULT_COLLECTION_KEY = "id";
     var DEFAULT_ARRAY = [];
     var DEFAULT_OBJECT = {};
@@ -61,6 +63,7 @@
       sideload: {},
       withCredentials: false,
       responseType: "json",
+      method: "GET",
       data: angular.copy(ResourceConfiguration.defaultData),
       params: angular.copy(ResourceConfiguration.defaultParams),
       headers: angular.copy(ResourceConfiguration.defaultHeaders)
@@ -146,13 +149,13 @@
       }
       return serialized;
     };
-    var IntervalUtils = {};
-    IntervalUtils.start = function(rResource, rFrequency) {
+    var intervalUtils = {};
+    intervalUtils.start = function(rResource, rFrequency) {
       var _this = this;
       var id = rResource.$__meta.pointer.cacheKey;
       var createNew = false;
       if (!angular.isNumber(rFrequency)) {
-        throw "IntervalUtils: interval frequency must be a number";
+        throw "intervalUtils: interval frequency must be a number";
       }
       if (!(id in _intervalJobs)) {
         createNew = true;
@@ -178,7 +181,7 @@
       }
       return createNew;
     };
-    IntervalUtils.stop = function(rResource) {
+    intervalUtils.stop = function(rResource) {
       var id = rResource.$__meta.pointer.cacheKey;
       if (!(id in _intervalJobs)) {
         return false;
@@ -204,35 +207,49 @@
         __debug[this.name][pCacheKey] = pCacheData;
         return this.storage.put(pCacheKey, pCacheData);
       },
-      update: function(pCacheKey, pCacheData) {
-        var data = this.get(pCacheKey);
-        data.$updatedTimestamp = _.now();
-        data.data = pCacheData;
-        return this.storage.put(pCacheKey, data);
+      update: function(pCacheKey, pCacheData, pUpdateIsLocal) {
+        var item = this.get(pCacheKey);
+        if (!pUpdateIsLocal) {
+          item.$updatedTimestamp = _.now();
+        }
+        item.data = pCacheData;
+        return this.storage.put(pCacheKey, item);
+      },
+      resetAll: function() {
+        __debug[this.name] = {};
+        this.storage.removeAll();
+        return true;
+      },
+      reset: function(rKey) {
+        delete __debug[this.name][rKey];
+        this.storage.remove(rKey);
+        return true;
       }
     };
     var resourceCache = new Cache("__resourceCache");
     var atomicCache = new Cache("__atomicCache");
-    var CacheUtils = {};
-    CacheUtils.Resource = {
+    var cacheUtils = {};
+    cacheUtils.resource = {
       buildData: function(rPointer, rAtomicCacheKeys) {
-        var data;
+        var data, item;
         if (rAtomicCacheKeys.length === 0) {
           return false;
         }
         if (rPointer._data.type === TYPE_ONE) {
-          data = atomicCache.get(rAtomicCacheKeys[0]).data;
+          item = atomicCache.get(rAtomicCacheKeys[0]);
+          data = item.data;
         } else {
           data = [];
           angular.forEach(rAtomicCacheKeys, function(aKey) {
-            data.push(atomicCache.get(aKey).data);
+            item = atomicCache.get(aKey);
+            data.push(item.data);
           });
         }
         resourceCache.update(rPointer.cacheKey, data);
         return true;
       }
     };
-    CacheUtils.Atomic = {
+    cacheUtils.atomic = {
       _insertData: function(cResourceName, cObject) {
         if (!(ID_KEY in cObject)) {
           cObject[ID_KEY] = "__internal" + _forcedId;
@@ -356,11 +373,11 @@
       }
       return basePath + this.resourcePath + serialized;
     };
-    var RequestUtils = {};
-    RequestUtils.build = function(rPointer, rOptions) {
+    var requestUtils = {};
+    requestUtils.build = function(rPointer, rOptions) {
       var url = rPointer.serializeUrl(rOptions.params);
       var request = {
-        method: DEFAULT_METHOD,
+        method: rOptions.method,
         url: url,
         data: rOptions.data,
         headers: rOptions.headers,
@@ -370,17 +387,17 @@
       };
       return request;
     };
-    RequestUtils.optimize = function(rRequest, rPointer, rOptions, rResourceName) {
+    requestUtils.optimize = function(rRequest, rPointer, rOptions, rResourceName) {
       var optimized = {};
       var requestNotNeeded = false;
       var cachedAtomicKeys = [];
       if (rPointer._data.type === TYPE_COLLECTION) {
-        var optimizedCollection = CacheUtils.Atomic.findUncached(rPointer._data.collectionArray, rResourceName);
+        var optimizedCollection = cacheUtils.atomic.findUncached(rPointer._data.collectionArray, rResourceName);
         optimized.url = rPointer.serializeUrl(rOptions.params, optimizedCollection);
         var cachedIds = rPointer._data.collectionArray.filter(function(dItem) {
           return optimizedCollection.indexOf(dItem) === -1;
         });
-        cachedAtomicKeys = CacheUtils.Atomic.cacheKeyArray(cachedIds, rResourceName);
+        cachedAtomicKeys = cacheUtils.atomic.cacheKeyArray(cachedIds, rResourceName);
         if (_.isEmpty(optimizedCollection)) {
           requestNotNeeded = true;
         }
@@ -417,16 +434,18 @@
       this.data = rPointer._data.type === TYPE_ONE ? DEFAULT_OBJECT : DEFAULT_ARRAY;
     };
     Resource.prototype = {
-      fetch: function(fSuccess, fError, fDisableOptimization) {
+      fetch: function(fSuccess, fError, fDisableOptimization, fDisableCaching) {
         var _this = this;
         var pointer, options, atomicCacheKeys, request;
         pointer = this.$__meta.pointer;
         options = this.$__meta.options;
-        request = RequestUtils.build(pointer, options);
+        request = requestUtils.build(pointer, options);
         if (!fDisableOptimization) {
-          var optimized = RequestUtils.optimize(request, pointer, options, this.$resourceName);
+          var optimized = requestUtils.optimize(request, pointer, options, this.$resourceName);
           atomicCacheKeys = optimized.cachedAtomicKeys;
-          CacheUtils.Resource.buildData(pointer, atomicCacheKeys);
+          if (!fDisableCaching) {
+            cacheUtils.resource.buildData(pointer, atomicCacheKeys);
+          }
           if (optimized.requestNotNeeded) {
             this.$__meta.status = STATUS_FETCHED;
             if (fSuccess && angular.isFunction(fSuccess)) {
@@ -441,8 +460,10 @@
           this.$__meta.status = STATUS_LOADING;
         }
         $http(request).then(function(fResult) {
-          atomicCacheKeys = CacheUtils.Atomic.populateCache(options, _this.$resourceName, fResult.data);
-          CacheUtils.Resource.buildData(pointer, atomicCacheKeys);
+          if (!fDisableCaching) {
+            atomicCacheKeys = cacheUtils.atomic.populateCache(options, _this.$resourceName, fResult.data);
+            cacheUtils.resource.buildData(pointer, atomicCacheKeys);
+          }
           _this.$requestTimestamp = _.now();
           _this.$__meta.status = STATUS_FETCHED;
           if (fSuccess && angular.isFunction(fSuccess)) {
@@ -458,10 +479,10 @@
         return this;
       },
       start: function(sIntervalFrequency) {
-        return IntervalUtils.start(this, sIntervalFrequency);
+        return intervalUtils.start(this, sIntervalFrequency);
       },
       stop: function() {
-        return IntervalUtils.stop(this);
+        return intervalUtils.stop(this);
       },
       isError: function() {
         return this.$__meta.status === STATUS_ERROR;
@@ -485,7 +506,43 @@
         }
       }
     };
-    var ResourceFactory = function(rPath, rVars, rResourceName, rOptions, rData) {
+    var resourceManipulator = function(rPath, rVars, rOptions, rLocalUpdates) {
+      var deferred, pointer, resource, options, resourceName;
+      deferred = $q.defer();
+      options = rOptions;
+      if (!("method" in options)) {
+        options.method = DEFAULT_MANIPULATION_METHOD;
+      }
+      options = _.update(defaultOptions, options);
+      if (ALLOWED_MANIPULATION_METHOD.indexOf(options.method) === -1) {
+        throw "ResourceServiceError: method is not allowed";
+      }
+      if (!(!_.isEmpty(rLocalUpdates) && rLocalUpdates.name && rLocalUpdates.id && rLocalUpdates.manipulate)) {
+        throw "ResourceServiceError: resource manipulation info is missing";
+      }
+      if (!angular.isFunction(rLocalUpdates.manipulate)) {
+        throw "ResourceServiceError: manipulate property must be a function";
+      }
+      var atomic = new ResourcePointer();
+      atomic.build(rLocalUpdates.name, rLocalUpdates.id);
+      atomic.parseCacheKey();
+      if (!_.isEmpty(rLocalUpdates) && atomicCache.exists(atomic.cacheKey)) {
+        var data = atomicCache.get(atomic.cacheKey).data;
+        resourceName = rLocalUpdates.name;
+        rLocalUpdates.manipulate(data);
+        atomicCache.update(atomic.cacheKey, data, true);
+      }
+      pointer = new ResourcePointer(rPath, rVars).parseCacheKey();
+      pointer.cacheKey = atomic.cacheKey;
+      resource = new Resource(pointer, resourceName || undefined, options);
+      resource.fetch(function() {
+        deferred.resolve(resource);
+      }, function() {
+        deferred.reject(resource);
+      }, true, resourceName ? false : true);
+      return deferred.promise;
+    };
+    var resourceFactory = function(rPath, rVars, rResourceName, rOptions, rData) {
       var pointer, data, resource;
       data = rData;
       if (data.type === TYPE_COLLECTION) {
@@ -497,20 +554,23 @@
         if (rData.type !== TYPE_ONE && !_.isEmpty(rOptions.sideload)) {
           throw "ResourceFactoryError: resources with array data cant handle sideloading";
         }
+        if (ALLOWED_RETRIEVAL_METHODS.indexOf(options.method) === -1) {
+          throw "ResourceServiceError: method is not allowed";
+        }
         resource = new Resource(pointer, rResourceName, options);
         resourceCache.set(pointer.cacheKey, resource);
         if (!options.silent) {
-          resource.fetch(false);
+          resource.fetch();
         }
         if (options.interval > 0) {
-          IntervalUtils.start(resource, options.interval);
+          intervalUtils.start(resource, options.interval);
         }
       } else {
         resource = resourceCache.get(pointer.cacheKey);
       }
       return resource;
     };
-    var ResourceService = function(rPath, rVars) {
+    var resourceService = function(rPath, rVars) {
       var vars = rVars || {};
       function _delegate(rResourceName, rOptions, rData) {
         var options;
@@ -527,7 +587,18 @@
         if (!angular.isObject(vars)) {
           throw "ResourceServiceError: options parameter must be an object";
         }
-        return ResourceFactory(rPath, vars, rResourceName, options, rData);
+        return resourceFactory(rPath, vars, rResourceName, options, rData);
+      }
+      function _manipulate(rOptions, rLocalUpdates) {
+        var options;
+        if (!rPath) {
+          throw "ResourceServiceError: path is missing";
+        }
+        if (!angular.isObject(vars)) {
+          throw "ResourceServiceError: path vars parameter must be an object";
+        }
+        options = rOptions || {};
+        return resourceManipulator(rPath, vars, options, rLocalUpdates);
       }
       return {
         all: function(rResourceName, rOptions) {
@@ -552,14 +623,24 @@
             collectionArray: rCollection
           });
         },
-        manipulate: function() {
-          return false;
+        send: function(rOptions, rLocalUpdates) {
+          return _manipulate(rOptions, rLocalUpdates);
+        },
+        reset: function(rKey) {
+          if (rKey) {
+            atomicCache.reset(rKey);
+            resourceCache.reset(rKey);
+          } else {
+            atomicCache.resetAll();
+            resourceCache.resetAll();
+          }
+          return true;
         },
         debug: function() {
           return __debug;
         }
       };
     };
-    return ResourceService;
+    return resourceService;
   } ]);
 })(window, window.angular);

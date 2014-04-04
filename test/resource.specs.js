@@ -28,6 +28,11 @@ var resourcesMock = {
   ]
 };
 
+var editableResourceMock = {
+  original: { id: 2001, text: 'This is a text.', subject: 'Hello World' },
+  edited: { id: 2001, text: 'This is a edited text.', subject: 'Hello World' }
+};
+
 var Resource, ResourceConfiguration, $http, $interval;
 
 beforeEach(function () {
@@ -68,6 +73,9 @@ beforeEach(function () {
 
     $http.when( 'GET', API_BASE_PATH + '/users?id[]=12&id[]=42&id[]=712').respond(200, collection);
     $http.when( 'GET', API_BASE_PATH + '/pages?slug[]=a&slug[]=b&slug[]=c').respond(200, resourcesMock.pages);
+
+    $http.when( 'POST', API_BASE_PATH + '/messages/2001/edit' ).respond(200, editableResourceMock.edited);
+    $http.when( 'GET', API_BASE_PATH + '/messages/2001' ).respond(200, editableResourceMock.original);
   });
 
 });
@@ -521,6 +529,40 @@ describe('ResourceService', function() {
 
       });
 
+    });
+
+  });
+
+  // ==========================================
+
+  describe('#send', function() {
+
+    var request;
+    var resource;
+
+    beforeEach(function() {
+      resource = Resource('/messages/:id', { id: 2001 }).one('messages');
+      $http.expect( 'GET', API_BASE_PATH + '/messages/2001' );
+      $http.flush();
+
+      request = Resource('/messages/:id/edit', { id: 2001 }).send({ method: 'POST' }, {
+        name: 'messages',
+        id: 2001,
+        manipulate: function(msg) {
+          msg.text = 'This is a edited text.';
+        }
+      });
+    });
+
+    it ('manipulates the data before server is being informed', function() {
+      expect(resource.data.subject).toEqual('Hello World');
+      expect(resource.data.text).toEqual('This is a edited text.');
+    });
+
+    it ('changes the data of all watching resources after fetch', function() {
+      $http.expect( 'POST', API_BASE_PATH + '/messages/2001/edit' );
+      $http.flush();
+      expect(resource.data.text).toEqual('This is a edited text.');
     });
 
   });

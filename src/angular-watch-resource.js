@@ -63,7 +63,11 @@
     var ID_KEY = 'id';
     var FORCED_ID_START = 1;
 
-    var DEFAULT_METHOD = 'GET';
+    var ALLOWED_RETRIEVAL_METHODS = [ 'GET', 'HEAD' ];
+    var ALLOWED_MANIPULATION_METHOD = [ 'PUT', 'POST', 'DELETE' ];
+
+    var DEFAULT_MANIPULATION_METHOD = 'POST';
+
     var DEFAULT_COLLECTION_KEY = 'id';
     var DEFAULT_ARRAY = [];
     var DEFAULT_OBJECT = {};
@@ -85,6 +89,7 @@
       sideload: {},
       withCredentials: false,
       responseType: 'json',
+      method: 'GET',
       data: angular.copy(ResourceConfiguration.defaultData),
       params: angular.copy(ResourceConfiguration.defaultParams),
       headers: angular.copy(ResourceConfiguration.defaultHeaders)
@@ -310,11 +315,27 @@
 
       // update data and timestamp from element
 
-      update: function(pCacheKey, pCacheData) {
-        var data = this.get(pCacheKey);
-        data.$updatedTimestamp = _.now();
-        data.data = pCacheData;
-        return this.storage.put(pCacheKey, data);
+      update: function(pCacheKey, pCacheData, pUpdateIsLocal) {
+        var item = this.get(pCacheKey);
+        if (! pUpdateIsLocal) {
+          item.$updatedTimestamp = _.now();
+        }
+        item.data = pCacheData;
+        return this.storage.put(pCacheKey, item);
+      },
+
+      // reset methods
+
+      resetAll: function() {
+        __debug[this.name] = {};
+        this.storage.removeAll();
+        return true;
+      },
+
+      reset: function(rKey) {
+        delete __debug[this.name][rKey];
+        this.storage.remove(rKey);
+        return true;
       }
 
     };
@@ -345,18 +366,20 @@
 
       buildData: function(rPointer, rAtomicCacheKeys) {
 
-        var data;
+        var data, item;
 
         if (rAtomicCacheKeys.length === 0) {
           return false;
         }
 
         if (rPointer._data.type === TYPE_ONE) {
-          data = atomicCache.get(rAtomicCacheKeys[0]).data;
+          item = atomicCache.get(rAtomicCacheKeys[0]);
+          data = item.data;
         } else {
           data = [];
           angular.forEach(rAtomicCacheKeys, function(aKey) {
-            data.push(atomicCache.get(aKey).data);
+            item = atomicCache.get(aKey);
+            data.push(item.data);
           });
         }
 
@@ -570,7 +593,7 @@
     requestUtils.build = function(rPointer, rOptions) {
       var url = rPointer.serializeUrl(rOptions.params);
       var request = {
-        method: DEFAULT_METHOD,
+        method: rOptions.method,
         url: url,
         data: rOptions.data,
         headers: rOptions.headers,
@@ -669,7 +692,7 @@
 
       // method to manually fill in the data (from server or cache), with callbacks
 
-      fetch: function(fSuccess, fError, fDisableOptimization) {
+      fetch: function(fSuccess, fError, fDisableOptimization, fDisableCaching) {
 
         var _this = this;
         var pointer, options, atomicCacheKeys, request;
@@ -684,7 +707,9 @@
           var optimized = requestUtils.optimize(request, pointer, options, this.$resourceName);
           atomicCacheKeys = optimized.cachedAtomicKeys;
 
-          cacheUtils.resource.buildData(pointer, atomicCacheKeys);
+          if (! fDisableCaching) {
+            cacheUtils.resource.buildData(pointer, atomicCacheKeys);
+          }
 
           if (optimized.requestNotNeeded) {
 
@@ -713,8 +738,10 @@
 
           // give data to cache (we dont manipulate our resource directly)
 
-          atomicCacheKeys = cacheUtils.atomic.populateCache(options, _this.$resourceName, fResult.data);
-          cacheUtils.resource.buildData(pointer, atomicCacheKeys);
+          if (! fDisableCaching) {
+            atomicCacheKeys = cacheUtils.atomic.populateCache(options, _this.$resourceName, fResult.data);
+            cacheUtils.resource.buildData(pointer, atomicCacheKeys);
+          }
 
           _this.$requestTimestamp = _.now();
 
@@ -781,6 +808,70 @@
 
     };
 
+    /* @ resourceManipulator
+     *
+     * sends a request to the server and returs a promise. when a local update object
+     * is given, change the object directly (to get direct feedback in the view)
+     */
+
+    var resourceManipulator = function(rPath, rVars, rOptions, rLocalUpdates) {
+
+      var deferred, pointer, resource, options, resourceName;
+
+      deferred = $q.defer();
+
+      // merge options
+
+      options = rOptions;
+
+      if (! ('method' in options)) {
+        options.method = DEFAULT_MANIPULATION_METHOD;
+      }
+
+      options = _.update(defaultOptions, options);
+
+      if (ALLOWED_MANIPULATION_METHOD.indexOf(options.method) === -1) {
+        throw 'ResourceServiceError: method is not allowed';
+      }
+
+      // update local data already before we got server response
+
+      if (! (!(_.isEmpty(rLocalUpdates)) && rLocalUpdates.name && rLocalUpdates.id && rLocalUpdates.manipulate)) {
+        throw 'ResourceServiceError: resource manipulation info is missing';
+      }
+
+      if (! (angular.isFunction(rLocalUpdates.manipulate))) {
+        throw 'ResourceServiceError: manipulate property must be a function';
+      }
+
+      var atomic = new ResourcePointer();
+      atomic.build(rLocalUpdates.name, rLocalUpdates.id);
+      atomic.parseCacheKey();
+
+      if (! _.isEmpty(rLocalUpdates) && atomicCache.exists(atomic.cacheKey)) {
+        var data = atomicCache.get(atomic.cacheKey).data;
+        resourceName = rLocalUpdates.name;
+        rLocalUpdates.manipulate(data);
+        atomicCache.update(atomic.cacheKey, data, true);
+      }
+
+      // request to server
+
+      pointer = new ResourcePointer(rPath, rVars).parseCacheKey();
+      pointer.cacheKey = atomic.cacheKey; // route cache to the resource we want to manipulate
+
+      resource = new Resource(pointer, resourceName || undefined, options);
+
+      resource.fetch(function(){
+        deferred.resolve(resource);
+      }, function() {
+        deferred.reject(resource);
+      }, true, resourceName ? false : true);
+
+      return deferred.promise;
+
+    };
+
     /* @ resourceFactory
      *
      * routes our paths and resource methods (all, one, collection) to the respective
@@ -810,6 +901,10 @@
           throw 'ResourceFactoryError: resources with array data cant handle sideloading';
         }
 
+        if (ALLOWED_RETRIEVAL_METHODS.indexOf(options.method) === -1) {
+          throw 'ResourceServiceError: method is not allowed';
+        }
+
         // create resource and put it in cache
 
         resource = new Resource(pointer, rResourceName, options);
@@ -818,7 +913,7 @@
         // first fetch after creating when not in silent mode
 
         if (! options.silent) {
-          resource.fetch(false);
+          resource.fetch();
         }
 
         // start $interval when given
@@ -869,11 +964,29 @@
         return resourceFactory(rPath, vars, rResourceName, options, rData);
       }
 
+      function _manipulate(rOptions, rLocalUpdates) {
+
+        var options;
+
+        if (! rPath) {
+          throw 'ResourceServiceError: path is missing';
+        }
+
+        if (! angular.isObject(vars)) {
+          throw 'ResourceServiceError: path vars parameter must be an object';
+        }
+
+        options = rOptions || {};
+
+        return resourceManipulator(rPath, vars, options, rLocalUpdates);
+
+      }
+
       // public interface
 
       return {
 
-        // basic watch methods (get)
+        // basic watch methods (GET, HEAD)
 
         all: function(rResourceName, rOptions) {
           return _delegate(rResourceName, rOptions, { type: TYPE_ALL });
@@ -894,11 +1007,23 @@
           return _delegate(rResourceName, rOptions, { type: TYPE_COLLECTION, collectionKey: key, collectionArray: rCollection });
         },
 
-        // change single resource (delete, post and put) methods
+        // change single resource (DELETE, POST and PUT) methods
 
-        manipulate: function() {
-          // @ TODO
-          return false;
+        send: function(rOptions, rLocalUpdates) {
+          return _manipulate(rOptions, rLocalUpdates);
+        },
+
+        // reset (all) caches
+
+        reset: function(rKey) {
+          if (rKey) {
+            atomicCache.reset(rKey);
+            resourceCache.reset(rKey);
+          } else {
+            atomicCache.resetAll();
+            resourceCache.resetAll();
+          }
+          return true;
         },
 
         // debug methods
