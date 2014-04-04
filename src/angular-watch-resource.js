@@ -18,7 +18,7 @@
       defaultHeaders: {}
     };
 
-    var ResourceConfiguration = {
+    var resourceConfiguration = {
       setBasePath: function(bPath) {
         if (bPath && typeof bPath === 'string') {
           _configuration.basePath = bPath;
@@ -49,11 +49,11 @@
       }
     };
 
-    return ResourceConfiguration;
+    return resourceConfiguration;
 
   }]);
 
-  /* @ ResourceService */
+  /* @ Resource */
 
   ngWatchResource.factory('Resource', [ '$cacheFactory', '$http', '$q', '$interval', 'ResourceConfiguration',
     function($cacheFactory, $http, $q, $interval, ResourceConfiguration) {
@@ -204,16 +204,16 @@
       return serialized;
     };
 
-    /* @ IntervalUtils
+    /* @ intervalUtils
      *
      * handles the frequent update of an resource
      */
 
-    var IntervalUtils = {};
+    var intervalUtils = {};
 
     // start a $interval, fetching new data in a certain frequency
 
-    IntervalUtils.start = function(rResource, rFrequency) {
+    intervalUtils.start = function(rResource, rFrequency) {
 
       /* jshint camelcase: false */
 
@@ -222,7 +222,7 @@
       var createNew = false;
 
       if (! angular.isNumber(rFrequency)) {
-        throw 'IntervalUtils: interval frequency must be a number';
+        throw 'intervalUtils: interval frequency must be a number';
       }
 
       // do we need to create a new one (changed frequency)
@@ -263,7 +263,7 @@
 
     // stop the $interval
 
-    IntervalUtils.stop = function(rResource) {
+    intervalUtils.stop = function(rResource) {
 
       /* jshint camelcase: false */
 
@@ -328,16 +328,16 @@
     var resourceCache = new Cache('__resourceCache');
     var atomicCache = new Cache('__atomicCache');
 
-    /* @ CacheUtils */
+    /* @ cacheUtils */
 
-    var CacheUtils = {};
+    var cacheUtils = {};
 
-    /* @ CacheUtils.Resource
+    /* @ cacheUtils.resource
      *
      * methods for our resourceCache
      */
 
-    CacheUtils.Resource = {
+    cacheUtils.resource = {
 
       // main method to build data for Resource objects based
       // on an array of atomic keys so we can read the data
@@ -367,12 +367,12 @@
 
     };
 
-    /* @ CacheUtils.Atomic
+    /* @ cacheUtils.atomic
      *
      * helper methods for our atomicCache
      */
 
-    CacheUtils.Atomic = {
+    cacheUtils.atomic = {
 
       // updates a atomic resource, when not given create it
 
@@ -558,16 +558,16 @@
       return basePath + this.resourcePath + serialized;
     };
 
-    /* @ RequestUtils
+    /* @ requestUtils
      *
      * helper methods to generate and optimize server requests
      */
 
-    var RequestUtils = {};
+    var requestUtils = {};
 
     // returns a proper object for $http requests
 
-    RequestUtils.build = function(rPointer, rOptions) {
+    requestUtils.build = function(rPointer, rOptions) {
       var url = rPointer.serializeUrl(rOptions.params);
       var request = {
         method: DEFAULT_METHOD,
@@ -583,21 +583,21 @@
 
     // compares the request with our cache to see if we can make it smaller or dispensable
 
-    RequestUtils.optimize = function(rRequest, rPointer, rOptions, rResourceName) {
+    requestUtils.optimize = function(rRequest, rPointer, rOptions, rResourceName) {
       var optimized = {};
       var requestNotNeeded = false;
       var cachedAtomicKeys = [];
 
       if (rPointer._data.type === TYPE_COLLECTION) {
 
-        var optimizedCollection = CacheUtils.Atomic.findUncached(rPointer._data.collectionArray, rResourceName);
+        var optimizedCollection = cacheUtils.atomic.findUncached(rPointer._data.collectionArray, rResourceName);
         optimized.url = rPointer.serializeUrl(rOptions.params, optimizedCollection);
 
         var cachedIds = rPointer._data.collectionArray.filter(function(dItem) {
           return optimizedCollection.indexOf(dItem) === -1;
         });
 
-        cachedAtomicKeys = CacheUtils.Atomic.cacheKeyArray(cachedIds, rResourceName);
+        cachedAtomicKeys = cacheUtils.atomic.cacheKeyArray(cachedIds, rResourceName);
 
         if (_.isEmpty(optimizedCollection)) {
           requestNotNeeded = true;
@@ -677,14 +677,14 @@
         pointer = this.$__meta.pointer;
         options = this.$__meta.options;
 
-        request = RequestUtils.build(pointer, options);
+        request = requestUtils.build(pointer, options);
 
         if (! fDisableOptimization) {
 
-          var optimized = RequestUtils.optimize(request, pointer, options, this.$resourceName);
+          var optimized = requestUtils.optimize(request, pointer, options, this.$resourceName);
           atomicCacheKeys = optimized.cachedAtomicKeys;
 
-          CacheUtils.Resource.buildData(pointer, atomicCacheKeys);
+          cacheUtils.resource.buildData(pointer, atomicCacheKeys);
 
           if (optimized.requestNotNeeded) {
 
@@ -713,8 +713,8 @@
 
           // give data to cache (we dont manipulate our resource directly)
 
-          atomicCacheKeys = CacheUtils.Atomic.populateCache(options, _this.$resourceName, fResult.data);
-          CacheUtils.Resource.buildData(pointer, atomicCacheKeys);
+          atomicCacheKeys = cacheUtils.atomic.populateCache(options, _this.$resourceName, fResult.data);
+          cacheUtils.resource.buildData(pointer, atomicCacheKeys);
 
           _this.$requestTimestamp = _.now();
 
@@ -743,11 +743,11 @@
       // interval update handling
 
       start: function(sIntervalFrequency) {
-        return IntervalUtils.start(this, sIntervalFrequency);
+        return intervalUtils.start(this, sIntervalFrequency);
       },
 
       stop: function() {
-        return IntervalUtils.stop(this);
+        return intervalUtils.stop(this);
       },
 
       // methods for status handling (for example in view)
@@ -781,14 +781,14 @@
 
     };
 
-    /* @ ResourceFactory
+    /* @ resourceFactory
      *
      * routes our paths and resource methods (all, one, collection) to the respective
      * Resource instance. Create one if it doesnt exist yet. There is one Resource
      * per path (not per request!).
      */
 
-    var ResourceFactory = function(rPath, rVars, rResourceName, rOptions, rData) {
+    var resourceFactory = function(rPath, rVars, rResourceName, rOptions, rData) {
 
       var pointer, data, resource;
 
@@ -824,7 +824,7 @@
         // start $interval when given
 
         if (options.interval > 0) {
-          IntervalUtils.start(resource, options.interval);
+          intervalUtils.start(resource, options.interval);
         }
 
       } else {
@@ -835,12 +835,12 @@
 
     };
 
-    /* @ ResourceService
+    /* @ resourceService
      *
      * exposes all available methods from the service
      */
 
-    var ResourceService = function(rPath, rVars) {
+    var resourceService = function(rPath, rVars) {
 
       var vars = rVars || {};
 
@@ -866,7 +866,7 @@
           throw 'ResourceServiceError: options parameter must be an object';
         }
 
-        return ResourceFactory(rPath, vars, rResourceName, options, rData);
+        return resourceFactory(rPath, vars, rResourceName, options, rData);
       }
 
       // public interface
@@ -911,7 +911,7 @@
 
     };
 
-    return ResourceService;
+    return resourceService;
 
   }]);
 
