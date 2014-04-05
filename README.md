@@ -100,7 +100,7 @@ Model Layer for large angular 1.3 applications based on $watch pattern inspired 
 
 Add this line to your bower.json dependencies
 
-    "angular-swipe":  "https://github.com/marmorkuchen-net/angular-watch-resource.git"
+    "angular-watch-resource":  "https://github.com/marmorkuchen-net/angular-watch-resource.git"
 
 and run *bower install* afterwards.
 
@@ -135,7 +135,14 @@ angular.module('app').factory('User', [ 'Resource', function(Resource) {
 
 ## Configuration
 
-Use the *ResourceConfigurationProvider* to set up the Resource service before runtime, for example like:
+Use the *ResourceConfigurationProvider* to set up the Resource service before runtime:
+
+* **setBasePath**(basePathUrlString) - this is the path to your api server (with or without slash at the end)
+* **setDefaultData**(defaultDataObject) - default data in each http request
+* **setDefaultParams**(defaultParamsObject) - default parameters in each http request
+* **setDefaultHeaders**(defaultHeadersObject) -default headers in each http request
+
+**Example:**
 
 ```
 app.config(function(ResourceConfigurationProvider) {
@@ -144,17 +151,12 @@ app.config(function(ResourceConfigurationProvider) {
 });
 ```
 
-* setBasePath(*basePathUrlString*) this is the path to your api server. You can use a slash or not at the end of the string.
-* setDefaultData(*defaultDataObject*) use an object to pass over default data in each http request
-* setDefaultParams(*defaultParamsObject*) use an object to pass over default parameters in each http request
-* setDefaultHeaders(*defaultHeadersObject*) use an object to pass over default headers in each http request
-
 ## Documentation
 
 The Resource service exposes the methodes *one*, *all*, *collection*, *send*, *reset* and *debug*. In most of the cases only the first four are needed.
 
 | Resource Service    | Resource Type              | Allowed HTTP methods     |
-| ------------------- |----------------------------| -------------------------|
+| ------------------- | -------------------------- | ------------------------ |
 | one                 | object (single resource)   | GET*, HEAD               |
 | all                 | array                      | GET*, HEAD               |
 | collection          | array                      | GET*, HEAD               |
@@ -170,50 +172,53 @@ A resource is basically a pointer to your data. Every unique path ("/users/212",
 
 The syntax to create a Resource is:
 
-    Resource(resourcePath [,resourceVars])
+* **Resource**(resourcePath [,resourceVars])
+    
+  Arguments:
 
-This resource is pointing now to the given resourcePath. The resourceVars are optional and basically helpers to replace variables in your resourcePath which begin with a colon (:name). For example:
+  - resourcePath (*String*)
+  - resourceVars (*Object*) [optional]
 
-    // points to the resource /books/917/pages/7
-    Resource('/books/:id/pages/:pageId', { id: 917, pageId: 7 })
+  This resource is pointing to the given *resourcePath*. The *resourceVars* are optional and basically helpers to replace variables in your *resourcePath*, which begin with a colon (:name).
 
-You can easily make these vars more dynamic so you are pointing to different data when they are changing:
+  **Example:**
 
-    $scope.$watch(function() {
-      return Resource('/users/:id', { id: $scope.selectedUserId }).one('users');
-    }, function(user) {
-      $scope.selectedUser = user;
-    });
+  ```
+  // points to the resource /books/917/pages/7
+  Resource('/books/:id/pages/:pageId', { id: 917, pageId: 7 })
+  ```
+
+  You can easily make these vars more dynamic so you are pointing to different data when they are changing:
+
+  ```
+  $scope.$watch(function() {
+    return Resource('/users/:id', { id: $scope.selectedUserId }).one('users');
+  }, function(user) {
+    $scope.selectedUser = user;
+  });
+  ```
 
 #### The Resource Object
 
 In nearly all of the cases the service returns a *Resource* object which exposes the following properties:
 
-##### Meta Information ("read-only")
+##### Meta Information
 
-These meta-properties are being ignored by angulars digest process:
+These $meta-properties are being ignored by angulars digest loop:
 
-* $createdTimestamp (*Number*) - unix timestamp with the time when the resource was initalized and ready for a server request
-* $updatedTimestamp (*Number*) - unix timestamp with the time of the last successful request and data update from the server
+* $createdTimestamp (*Number*) - timestamp when the resource was initalized and ready for a server request
+* $updatedTimestamp (*Number*) - timestamp of the last data change
+* $requestTimestamp (*Number* or *undefined*) - timestamp of the last successful server request. When this is *undefined* this data was already stripped from another request and there is no need to do a server request.
 * $resourceName (*String*) - the given resource name (like "users" or "books")
 * $url (*String*) - the parsed url string we are using for the server request
 
-##### Data ("read-only")
+##### Data
 
 * data (*Object* or *Array*) - depending on the request (one, all or collection) this is a single object or an array of multiple objects containing the data we got from the server
 
 ##### Functions
 
 * **fetch**([successCallback, errorCallback, disableOptimization, disableCaching]) (returns *Resource*)
-
-  Example:
-
-  ```
-  Resource('/users/51').one('users').fetch(function(userResource) {
-    // some more traditional approach here..
-    $scope.user = userResource;
-  });
-  ```
 
   Arguments:
 
@@ -222,17 +227,26 @@ These meta-properties are being ignored by angulars digest process:
   - disableOptimization (*Boolean*) [optional]
   - disableCaching (*Boolean*) [optional]
 
+  **Example:**
+
+  ```
+  Resource('/users/51').one('users').fetch(function(userResource) {
+    // some more traditional approach here..
+    $scope.user = userResource;
+  });
+  ```
+
 * **isEmpty**() (returns *Boolean*)
 * **isReady**() (returns *Boolean*)
 * **isError**() (returns *Boolean*)
 
-The Booleans indicate the state of the Resource. When the resource is...
-
-|            | initalized | fetched    | error      |
-| ---------- | ---------- | ---------- | ---------- |
-| isEmpty    | false      | true/false | true/false |
-| isReady    | false      | true       | false      |
-| isError    | false      | false      | true       |
+  The returned booleans indicate the status of the Resource. When the resource is...
+  
+  |            | initalized | fetched    | error      |
+  | ---------- | ---------- | ---------- | ---------- |
+  | isEmpty    | false      | true/false | true/false |
+  | isReady    | false      | true       | false      |
+  | isError    | false      | false      | true       |
 
 * **message**([allMessages]) (returns *Object* or *Array*)
 
@@ -245,9 +259,9 @@ The Booleans indicate the state of the Resource. When the resource is...
 
 * **start**(updateFrequency) (returns *Boolean*)
 
-  creates an $interval job, calling a resource fetch in a frequent interval, read further under Resource Options for more info about update intervals.
+  creates an $interval job, calling a resource fetch in a frequent interval, read further under *Resource Options* for more info about update intervals.
 
-  If this is called multiple times on the same Resource it will replace the old interval job when the frequency has changed (returns true, otherwise false).
+  If this is called multiple times on the same Resource, it will replace the old interval job when the frequency has changed (returns true, otherwise false).
 
   Arguments:
 
@@ -258,41 +272,205 @@ The Booleans indicate the state of the Resource. When the resource is...
 
   cancels the given $interval job (returns true). Returns false when none was given.
 
-### Resource.one()
+### Retrieval methods
 
-@TODO
+All of these methods return a initial *Resource* instance we can watch in our controllers (read more about it above).
 
-### Resource.all()
+* **Resource**(resourcePath [,resourceVars]).**one**(resourceName [, resourceOptions])
 
-@TODO
+  Retrieves a single object from the server via GET method (for example */groups/21*).
 
-### Resource.collection()
+  Arguments:
+  
+  - resourceName (*String*)
+  this variable is needed to make the cache handler understand with what data it is dealing with. The returned data from the server will be interpreted with this name (like "users" or "countries" etc.)  
 
-@TODO
+  - resourceOptions (*Object*) [optional]
+  see Resource Options for further details
+  
+  **Example:**
 
-### Resource.send()
+  ```
+  $scope.$watch(function() {
+    return Resource('/messages/:id', { id: $scope.selectedMessage }).one('messages');
+  }, function(message) {
+    $scope.message = message;
+  });
+  ```
+  
+* **Resource**(resourcePath [,resourceVars]).**all**(resourceName [, resourceOptions])
 
-@TODO
+  Retrieves an array of single objects from the server via GET method (*/groups/21/followers*, */groups* etc.).
+
+  Arguments:
+  
+  - resourceName (*String*)
+  this variable is needed to make the cache handler understand with what data it is dealing with. The returned array from the server will be interpreted as a collection of data with this name (like "users" or "countries" etc.)  
+
+  - resourceOptions (*Object*) [optional]
+  see Resource Options for further details
+  
+  **Example:**
+
+  ```
+  $scope.$watch(function() {
+    return Resource('/messages/:id/recipients', { id: $scope.selectedMessage }).all('users');
+  }, function(recipients) {
+    $scope.recipients = recipients;
+  });
+  ```
+
+* **Resource**(resourcePath [,resourceVars]).**collection**(resourceName, collectionIds, [collectionKey], [ resourceOptions])
+
+  Retrieves an array of single objects with an request containing specific ids via GET method (like */groups?id[]=22&id[]21*)
+
+  Arguments:
+  
+  - resourceName (*String*)
+  this variable is needed to make the cache handler understand with what data it is dealing with. The returned array from the server will be interpreted as a collection of data with this name (like "users" or "countries" etc.)  
+
+  - collectionIds (*Array*)
+  contains the identifiers of the resources we are requesting, in most of the cases id's
+
+  - collectionKey (*String*) [optional]
+  key for your given collection array. Default is "id"
+
+  - resourceOptions (*Object*) [optional]
+  see Resource Options for further details
+  
+  **Example:**
+
+  ```
+  // this looks like: /pages?slug[]=home&slug[]=about&slug[]=contact
+  $scope.$watch(function() {
+    return Resource('/pages').collection('pages', [ "home", "about", "contact" ], "slug" );
+  }, function(pages) {
+    $scope.navigation = pages;
+  });
+  ```
+
+### Update and manipulation methods
+
+Different from the retrieval methods the manipulation methods return a *promise* instead of a Resource instance since we dont want to watch single server requests like these.
+
+* **Resource**(resourcePath [,resourceVars]).**send**([resourceOptions], [localUpdate])
+
+  Sends an POST request to the given path (or DELETE, PUT when set in options) and optionally changes the data of the Resource before the server gets informed.
+
+  Arguments:
+
+  - resourceOptions (*Object*) [optional]
+  see Resource Options for further details
+
+  - localUpdate (*Object* or *Array*) [optional]
+  you can pass over a localUpdate object which looks like this:
+
+  ```
+  {
+    name: <*String*>,
+    id: <*Number*>,
+    manipulate: function(resourceInstanceData) {
+      // manipulate your resource here
+    }
+  }
+  ```
+  
+  When you send the request the data of the Resource with the name and id (example: */users/221*) can be already changed via the *manipulate* function which takes your current resource data as an argument. Your changes will be applied to the cache and therefore directly accessible by all resource $watchers.
+  
+  Changing your local data like this is only possible when the resource exists in your cache.
+  
+  **Example:**
+
+  ```
+  Resource('/messages/:id/edit', { id: $scope.selectedMessage }).send(
+    {
+      method: 'POST',
+      params: {
+        subject: $scope.editor.subject,
+        text: $scope.editor.text
+      }
+    },
+    {
+      name: 'messages',
+      id: $scope.selectedMessage,
+      manipulate: function (messageData) {
+        messageData.subject = $scope.editor.subject;
+        messageData.text = $scope.editor.text;
+      }
+    }
+  ).then(function() {
+    alert('You succesfully updated your message');
+  });
+  
+  // this watch (somewhere else in the app) will react directly to your changes
+  
+  $scope.$watch(function() {
+    return Resource('/messages/:id', { id: $scope.selectedMessage }).one('messages');
+  }, function(message) {
+    $scope.message = message;
+  });
+  
+  ```
+  
+### Other methods
+
+* **Resource**().**reset**([resourcePointer])
+
+  Clears the cache (when no pointer is given).
+
+  Arguments:
+
+  - resourcePointer (*String*) [optional]
+  clear all cache for the given resource pointer
+
+  **Example:**
+
+  ```
+  Resource().reset('/users/221');
+  ```
+
+* **Resource**().**debug**()
+
+  returns a object with the current cache contents and interval jobs
 
 ### Resource Options
 
 Default Options:
 
-    interval: 0
-    silent: false
-    sideload: {}
-    withCredentials: false
-    responseType: 'json'
-    method: 'GET'
-    data: {}
-    params: {}
-    headers: {}
+```
+{
+  interval: 0,
+  silent: false,
+  sideload: {},
+  withCredentials: false,
+  responseType: 'json',
+  method: 'GET',
+  data: {},
+  params: {},
+  headers: {}
+}
+```
 
-@TODO
+for send methods the default method is 'POST'.
+    
+#### Sideloading Resources
 
-## Debugging
+**Example:**
 
-@TODO
+```
+Resource('/continents').one('continents', {
+  sideload: {
+    'users': 'users',
+    'all_cities': 'cities',
+    'countries': 'countries'
+  }
+});
+
+// this resource exists without a new server request
+
+Resource('/cities/:id', { id: 912 } ).one('cities');
+
+```
 
 ## Development
 
