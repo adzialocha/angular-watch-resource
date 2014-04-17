@@ -143,33 +143,35 @@ all its related resources to make it ready for further processing
 
 - Include this (or the minified) file in your main *.html* document:
 
-    <script src="<your bower_components>/angular-watch-resource/dist/angular-watch-resource.js"></script>
+  ```
+  <script src="<your bower_components>/angular-watch-resource/dist/angular-watch-resource.js"></script>
+  ```
 
 - Set `resource.service` as a module dependency in your angular app. Inject `Resource` in all controllers or whereever you want to work with it.
 
 - You want to separate your different Resources by wrapping them in individual services. For example like this:
 
-```
-// User.js
+  ```
+  // User.js
 
-angular.module('app').factory('User', [ 'Resource', function(Resource) {
+  angular.module('app').factory('User', [ 'Resource', function(Resource) {
 
-  var User = {
-    one: function(userId) {
-      return Resource('/users/:id', { id: userId }).one('users');
-    },
-    followers: function(userId) {
-      return Resource('/users/:id/followers', { id: userId }).all('users');
-    },
-    collection: function(userIds) {
-      return Resource('/users').collection('users', userIds);
-    }
-  };
+    var User = {
+      one: function(userId) {
+        return Resource('/users/:id', { id: userId }).one('users');
+      },
+      followers: function(userId) {
+        return Resource('/users/:id/followers', { id: userId }).all('users');
+      },
+      collection: function(userIds) {
+        return Resource('/users').collection('users', userIds);
+      }
+    };
 
-  return User;
+    return User;
 
-}]);
-```
+  }]);
+  ```
 
 ## Configuration
 
