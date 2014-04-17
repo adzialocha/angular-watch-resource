@@ -8,7 +8,7 @@
   "homepage": "https://github.com/marmorkuchen-net/angular-watch-resource",
   "repository": {
     "type": "git",
-    "url": "git@github.com:marmorkuchen-net/angular-watch-resource.git"
+    "url": "git://github.com/marmorkuchen-net/angular-watch-resource.git"
   },
   "keywords": [
     "mobile",
