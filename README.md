@@ -483,6 +483,7 @@ Different from the retrieval methods the manipulation methods return a *promise*
 
   // clear a collection of resources
   Resource().reset('users', [ 221, 222, 223, 224, 827 ] );
+
   ```
 
 * **Resource**().**debug**()
@@ -542,7 +543,6 @@ Resource('/continents').one('continents', {
 Resource('/cities/:id', { id: 912 } ).one('cities');
 
 ```
-
 #### Nested Resources Option
 
 Sometimes your app requires additional info from other resources before it can process a single object or array with resource data.
@@ -603,7 +603,6 @@ Resource('/continents').one('continents', {
 Resource('/countries/:id', { id: 19 } ).one('countries');
 
 ```
-
 ## Development
 
 This code is part of an large app and written for an individual case but please feel free to send pull and feature requests to make it more generic!
