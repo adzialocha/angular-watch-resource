@@ -1,11 +1,22 @@
 {
+  "author": "marmorkuchen.net",
   "name": "angular-watch-resource",
+  "description": "Model Layer for AngularJS based on $watch pattern",
   "version": "0.5.0",
+  "homepage": "https://github.com/marmorkuchen-net/angular-watch-resource",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:marmorkuchen-net/angular-watch-resource.git"
+  },
   "main": "dist/angular-watch-resource.js",
   "dependencies": {
     "angular": "1.2.16"
   },
   "devDependencies": {
     "angular-mocks": "1.2.16"
-  }
+  },
+  "licenses": [{
+    "type": "MIT",
+    "url": "http://www.opensource.org/licenses/MIT"
+  }]
 }
