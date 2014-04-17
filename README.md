@@ -139,19 +139,15 @@ all its related resources to make it ready for further processing
 
 **Please note**: This model layer service was built for an specific API which follows a strict stateless REST architecture. Read carefully if it fits your needs or make a pull request!
 
-Add this line to your bower.json dependencies
+- Run `bower install angular-watch-resource`.
 
-    "angular-watch-resource":  "https://github.com/marmorkuchen-net/angular-watch-resource.git"
-
-and run *bower install* afterwards.
-
-Include this (or the minified) file in your main *.html* document:
+- Include this (or the minified) file in your main *.html* document:
 
     <script src="<your bower_components>/angular-watch-resource/dist/angular-watch-resource.js"></script>
 
-Set *resource.service* as a module dependency in your angular app. Inject *Resource* in all controllers or whereever you want to work with it.
+- Set `resource.service` as a module dependency in your angular app. Inject `Resource` in all controllers or whereever you want to work with it.
 
-You want to separate your different Resources by wrapping them in individual services. For example like this:
+- You want to separate your different Resources by wrapping them in individual services. For example like this:
 
 ```
 // User.js
@@ -248,11 +244,11 @@ In nearly all of the cases the service returns an *Resource* object which expose
 
 These $meta-properties are being ignored by angulars digest cycle:
 
-* $createdTimestamp (*Number*) - timestamp when the resource was initalized and ready for a server request
-* $updatedTimestamp (*Number*) - timestamp of the last data change
-* $requestTimestamp (*Number* or *undefined*) - timestamp of the last successful server request. When this is *undefined* this data was already stripped from another request and there is no need to do a server request (yay!).
-* $resourceName (*String*) - the given resource name (like *users* or *books*)
-* $url (*String*) - the url we are using for the server request
+* `$createdTimestamp` (*Number*) - timestamp when the resource was initalized and ready for a server request
+* `$updatedTimestamp` (*Number*) - timestamp of the last data change
+* `$requestTimestamp` (*Number* or *undefined*) - timestamp of the last successful server request. When this is *undefined* this data was already stripped from another request and there is no need to do a server request (yay!).
+* `$resourceName` (*String*) - the given resource name (like *users* or *books*)
+* `$url` (*String*) - the url we are using for the server request
 
 ##### Data
 
