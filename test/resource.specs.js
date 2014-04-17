@@ -6,7 +6,7 @@ var ERROR_MESSAGE = { message: 'a error message', code: 1223 };
 
 var resourcesMock = {
   users: [
-    { id: 512, name: 'Henry' },
+    { id: 512, name: 'Henry',  },
     { id: 12, name: 'Peter' },
     { id: 712, name: 'Paul' },
     { id: 42, name: 'Helmut' }
@@ -25,6 +25,21 @@ var resourcesMock = {
   countries: [
     { id: 122, name: 'Germany' },
     { id: 123, name: 'Poland' }
+  ],
+  events: [
+    { id: 10, production_id: 2, organization_id: 6, attendances_user_ids: [ 12, 512 ] },
+    { id: 81, production_id: 5, organization_id: 7, attendances_user_ids: [ 512 ] },
+    { id: 91, production_id: 12, organization_id: 8, attendances_user_ids: [ 712, 42 ] }
+  ],
+  productions: [
+    { id: 2 },
+    { id: 5 },
+    { id: 12 }
+  ],
+  organizations: [
+    { id: 6 },
+    { id: 7 },
+    { id: 8 }
   ]
 };
 
@@ -37,7 +52,7 @@ var Resource, ResourceConfiguration, $http, $interval;
 
 beforeEach(function () {
 
-  module('ngWatchResource', function(ResourceConfigurationProvider) {
+  module('resource.service', function(ResourceConfigurationProvider) {
     ResourceConfigurationProvider.setBasePath(API_BASE_PATH);
     ResourceConfigurationProvider.setDefaultHeaders(DEFAULT_HEADERS);
   });
@@ -54,6 +69,10 @@ beforeEach(function () {
     $http.when( 'GET', API_BASE_PATH + '/users/12' ).respond(200, resourcesMock.users[1]);
     $http.when( 'GET', API_BASE_PATH + '/users/712' ).respond(200, resourcesMock.users[2]);
     $http.when( 'GET', API_BASE_PATH + '/users/42' ).respond(200, resourcesMock.users[3]);
+
+    $http.when( 'GET', API_BASE_PATH + '/cities/122' ).respond(200, resourcesMock.cities[0]);
+    $http.when( 'GET', API_BASE_PATH + '/cities/123' ).respond(200, resourcesMock.cities[1]);
+    $http.when( 'GET', API_BASE_PATH + '/cities/124' ).respond(200, resourcesMock.cities[2]);
 
     $http.when( 'GET', API_BASE_PATH + '/users_wrong/512' ).respond(404, ERROR_MESSAGE );
 
@@ -76,6 +95,12 @@ beforeEach(function () {
 
     $http.when( 'POST', API_BASE_PATH + '/messages/2001/edit' ).respond(200, editableResourceMock.edited);
     $http.when( 'GET', API_BASE_PATH + '/messages/2001' ).respond(200, editableResourceMock.original);
+
+    $http.when( 'GET', API_BASE_PATH + '/events' ).respond(200, resourcesMock.events);
+    $http.when( 'GET', API_BASE_PATH + '/productions?id[]=2&id[]=5&id[]=12' ).respond(200, resourcesMock.productions);
+    $http.when( 'GET', API_BASE_PATH + '/organizations?id[]=6&id[]=7&id[]=8' ).respond(200, resourcesMock.organizations);
+    $http.when( 'GET', API_BASE_PATH + '/users?id[]=12&id[]=42&id[]=512&id[]=712' ).respond(200, resourcesMock.users);
+
   });
 
 });
@@ -232,6 +257,83 @@ describe('ResourceService', function() {
 
     });
 
+    describe('fetch with interval option', function() {
+
+      describe('resource with interval option', function() {
+
+        var resource;
+
+        beforeEach(function() {
+          resource = Resource('/users/:id', { id: 512 }).one('users', {
+            interval: 50
+          });
+          $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+          $http.flush();
+        });
+
+        it ('fetches data from the server with every interval step', function() {
+
+          $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+          $interval.flush(50);
+          $http.flush();
+          $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+          $interval.flush(50);
+          $http.flush();
+          $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+          $interval.flush(50);
+          $http.flush();
+
+        });
+
+        it ('resource #stop interval', function() {
+          $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+          $interval.flush(50);
+          $http.flush();
+          resource.stop();
+          $interval.flush(50);
+        });
+
+        it ('resource #start interval with new frequency', function() {
+          $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+          $interval.flush(50);
+          $http.flush();
+          resource.start(1000);
+          $interval.flush(50);
+          $interval.flush(50);
+          $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+          $interval.flush(900);
+          $http.flush();
+        });
+
+      });
+
+      describe('resource #start interval', function() {
+
+        var resource;
+
+        beforeEach(function() {
+          resource = Resource('/users/:id', { id: 512 }).one('users');
+          $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+          $http.flush();
+        });
+
+        it ('fetches data from the server with every interval step', function() {
+
+          resource.start(125);
+
+          $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+          $interval.flush(125);
+          $http.flush();
+          $http.expect( 'GET', API_BASE_PATH + '/users/512' );
+          $interval.flush(125);
+          $http.flush();
+
+        });
+
+      });
+
+    });
+
     describe('#isReady', function() {
 
       var resource;
@@ -377,6 +479,50 @@ describe('ResourceService', function() {
 
     });
 
+    describe('#fetch with nested option', function() {
+
+      var resource;
+
+      beforeEach(function() {
+
+        resource = Resource('/:res', { res: 'events' }).all('events', {
+          nested: {
+            'productions':   'production_id',
+            'organizations': 'organization_id',
+            'users':         'attendances_user_ids'
+          }
+        });
+
+        $http.expect( 'GET', API_BASE_PATH + '/events' );
+        $http.expect( 'GET', API_BASE_PATH + '/productions?id[]=2&id[]=5&id[]=12' );
+        $http.expect( 'GET', API_BASE_PATH + '/organizations?id[]=6&id[]=7&id[]=8' );
+        $http.expect( 'GET', API_BASE_PATH + '/users?id[]=12&id[]=42&id[]=512&id[]=712' );
+
+        $http.flush();
+
+      });
+
+      afterEach(function() {
+        $http.verifyNoOutstandingExpectation();
+        $http.verifyNoOutstandingRequest();
+      });
+
+      it ('fetch a resource build from the server', function() {
+        expect(resource.data[0]).toEqual(resourcesMock.events[0]);
+        expect(resource.data[1]).toEqual(resourcesMock.events[1]);
+        expect(resource.data[2]).toEqual(resourcesMock.events[2]);
+        expect(resource.data[3]).toEqual(undefined);
+      });
+
+      it ('populate the cache correctly so we can access single resources directly', function() {
+        var single_resource = Resource('/users/:id', { id: 712 }).one('users');
+        expect(single_resource.data.name).toEqual('Paul');
+        var another_single_resource = Resource('/organizations/:id', { id: 8 }).one('organizations');
+        expect(another_single_resource.data.id).toEqual(8);
+      });
+
+    });
+
   });
 
   describe('#collection', function() {
@@ -456,83 +602,6 @@ describe('ResourceService', function() {
 
   });
 
-  describe('$interval', function() {
-
-    describe('resource with interval option', function() {
-
-      var resource;
-
-      beforeEach(function() {
-        resource = Resource('/users/:id', { id: 512 }).one('users', {
-          interval: 50
-        });
-        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
-        $http.flush();
-      });
-
-      it ('fetches data from the server with every interval step', function() {
-
-        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
-        $interval.flush(50);
-        $http.flush();
-        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
-        $interval.flush(50);
-        $http.flush();
-        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
-        $interval.flush(50);
-        $http.flush();
-
-      });
-
-      it ('resource #stop interval', function() {
-        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
-        $interval.flush(50);
-        $http.flush();
-        resource.stop();
-        $interval.flush(50);
-      });
-
-      it ('resource #start interval with new frequency', function() {
-        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
-        $interval.flush(50);
-        $http.flush();
-        resource.start(1000);
-        $interval.flush(50);
-        $interval.flush(50);
-        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
-        $interval.flush(900);
-        $http.flush();
-      });
-
-    });
-
-    describe('resource #start interval', function() {
-
-      var resource;
-
-      beforeEach(function() {
-        resource = Resource('/users/:id', { id: 512 }).one('users');
-        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
-        $http.flush();
-      });
-
-      it ('fetches data from the server with every interval step', function() {
-
-        resource.start(125);
-
-        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
-        $interval.flush(125);
-        $http.flush();
-        $http.expect( 'GET', API_BASE_PATH + '/users/512' );
-        $interval.flush(125);
-        $http.flush();
-
-      });
-
-    });
-
-  });
-
   // ==========================================
 
   describe('#send', function() {
@@ -563,6 +632,77 @@ describe('ResourceService', function() {
       $http.expect( 'POST', API_BASE_PATH + '/messages/2001/edit' );
       $http.flush();
       expect(resource.data.text).toEqual('This is a edited text.');
+    });
+
+  });
+
+  describe('#reset', function() {
+
+    beforeEach(function() {
+      Resource('/continents').one('continents', {
+        sideload: {
+          'users': 'users',
+          'all_cities': 'cities',
+          'countries': 'countries'
+        }
+      });
+
+      $http.expect( 'GET', API_BASE_PATH + '/continents' );
+      $http.flush();
+    });
+
+    afterEach(function() {
+      $http.verifyNoOutstandingExpectation();
+      $http.verifyNoOutstandingRequest();
+    });
+
+    it ('empties the whole cache', function() {
+      Resource().reset();
+      Resource('/cities/:id', { id: 124 }).one('cities');
+      Resource('/users/:id', { id: 12 }).one('users');
+      $http.expect( 'GET', API_BASE_PATH + '/cities/124' );
+      $http.expect( 'GET', API_BASE_PATH + '/users/12' );
+      $http.flush();
+    });
+
+    it ('empties a single cache resource', function() {
+      Resource().reset('/users/712');
+      Resource('/cities/:id', { id: 124 }).one('cities');
+      Resource('/users/:id', { id: 712 }).one('users');
+      $http.expect( 'GET', API_BASE_PATH + '/users/712' );
+      $http.flush();
+    });
+
+    it ('empties a single cache resource with two arguments', function() {
+      Resource().reset('users', 712);
+      Resource('/cities/:id', { id: 124 }).one('cities');
+      Resource('/users/:id', { id: 712 }).one('users');
+      $http.expect( 'GET', API_BASE_PATH + '/users/712' );
+      $http.flush();
+    });
+
+    it ('empties a collection of cache resources', function() {
+
+      Resource().reset('cities', [124, 123, 122]);
+      Resource('/cities/:id', { id: 125 }).one('cities');
+
+      Resource('/cities/:id', { id: 123 }).one('cities');
+      Resource('/cities/:id', { id: 124 }).one('cities');
+      Resource('/cities/:id', { id: 122 }).one('cities');
+
+      $http.expect( 'GET', API_BASE_PATH + '/cities/123' );
+      $http.expect( 'GET', API_BASE_PATH + '/cities/124' );
+      $http.expect( 'GET', API_BASE_PATH + '/cities/122' );
+      $http.flush();
+
+    });
+
+  });
+
+  describe('#debug', function() {
+
+    it ('exists and returns some kind of something', function() {
+      expect(Resource().debug()).toEqual(jasmine.any(Object));
     });
 
   });

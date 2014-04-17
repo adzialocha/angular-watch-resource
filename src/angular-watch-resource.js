@@ -4,7 +4,7 @@
 
   // @ ngWatchResource
 
-  var ngWatchResource = angular.module('ngWatchResource', []);
+  var ngWatchResource = angular.module('resource.service', []);
 
   /* @ ResourceConfigurationProvider
    * configuration of service */
@@ -87,6 +87,7 @@
       interval: 0,
       silent: false,
       sideload: {},
+      nested: {},
       withCredentials: false,
       responseType: 'json',
       method: 'GET',
@@ -109,6 +110,14 @@
     _.unique = function(cArray) {
       return cArray.filter(function(value, index, self) {
         return self.indexOf(value) === index;
+      });
+    };
+
+    // sort number arrays
+
+    _.sort = function(cArray) {
+      return cArray.sort(function(aItem, bItem) {
+        return aItem - bItem;
       });
     };
 
@@ -316,6 +325,9 @@
       // update data and timestamp from element
 
       update: function(pCacheKey, pCacheData, pUpdateIsLocal) {
+        if (! this.exists(pCacheKey)) {
+          return null;
+        }
         var item = this.get(pCacheKey);
         if (! pUpdateIsLocal) {
           item.$updatedTimestamp = _.now();
@@ -515,6 +527,18 @@
       return this;
     };
 
+    // build a collection resource pointer
+
+    ResourcePointer.prototype.buildCollection = function(rResourceName, rIds) {
+      this._path = rResourceName;
+      this._data = {
+        type: TYPE_COLLECTION,
+        collectionArray: rIds,
+        collectionKey: DEFAULT_COLLECTION_KEY
+      };
+      return this;
+    };
+
     // parse variables and collection data in path to generate a cacheKey
 
     ResourcePointer.prototype.parseCacheKey = function() {
@@ -591,17 +615,15 @@
     // returns a proper object for $http requests
 
     requestUtils.build = function(rPointer, rOptions) {
-      var url = rPointer.serializeUrl(rOptions.params);
-      var request = {
+      return {
         method: rOptions.method,
-        url: url,
+        url: rPointer.serializeUrl(rOptions.params),
         data: rOptions.data,
         headers: rOptions.headers,
         withCredentials: rOptions.withCredentials,
         responseType: rOptions.responseType,
         cache: false
       };
-      return request;
     };
 
     // compares the request with our cache to see if we can make it smaller or dispensable
@@ -694,77 +716,194 @@
 
       fetch: function(fSuccess, fError, fDisableOptimization, fDisableCaching) {
 
-        var _this = this;
-        var pointer, options, atomicCacheKeys, request;
+        // the server request handler
+
+        function handleRequest(rRequestData, rOptions, rPointer, resourceName) {
+
+          var deferred;
+
+          // we return a promise here
+
+          deferred = $q.defer();
+
+          var request, optimized, pointer, options, atomicCacheKeys;
+
+          request = rRequestData;
+          options = rOptions;
+          pointer = rPointer;
+
+          if (! fDisableOptimization) {
+            optimized = requestUtils.optimize(request, pointer, options, resourceName);
+            atomicCacheKeys = optimized.cachedAtomicKeys;
+
+            if (! fDisableCaching) {
+              cacheUtils.resource.buildData(pointer, atomicCacheKeys);
+            }
+
+            if (optimized.requestNotNeeded) {
+              // we dont need to ask the server
+              deferred.resolve(false);
+              return deferred.promise;
+            } else {
+              request = optimized.request;
+            }
+          }
+
+          // fetch data from the server
+
+          $http(request).then(function(fResult) {
+
+            // give data to cache (we dont manipulate our resource directly)
+
+            if (! fDisableCaching) {
+              atomicCacheKeys = cacheUtils.atomic.populateCache(options, resourceName, fResult.data);
+              cacheUtils.resource.buildData(pointer, atomicCacheKeys);
+            }
+
+            deferred.resolve(true);
+
+          }, function(fErrorData) {
+            deferred.reject(fErrorData);
+          });
+
+          return deferred.promise; // return handleRequest()
+
+        }
+
+        // error callback
+
+        function errorCallback(rResourceInstance, rErrorData) {
+
+          // error occurred
+
+          rResourceInstance.$__meta.status = STATUS_ERROR;
+          rResourceInstance.$__meta.errors.push(rErrorData.data);
+
+          if (fError && angular.isFunction(fError)) {
+            fError(rResourceInstance);
+          }
+
+        }
+
+        // callback handling when everything is done
+
+        function finalizeRequest(rPromises, rResourceInstance) {
+
+          $q.all(rPromises).then(function(rHttpRequestNeeded) {
+
+            // resource is ready
+
+            if (rHttpRequestNeeded) {
+              rResourceInstance.$requestTimestamp = _.now();
+            }
+
+            rResourceInstance.$__meta.status = STATUS_FETCHED;
+
+            if (fSuccess && angular.isFunction(fSuccess)) {
+              fSuccess(rResourceInstance);
+            }
+
+          }, function(rErrorData) {
+            errorCallback(rResourceInstance, rErrorData);
+          });
+
+        }
+
+        // setup requests
+
+        var pointer, options;
 
         pointer = this.$__meta.pointer;
         options = this.$__meta.options;
-
-        request = requestUtils.build(pointer, options);
-
-        if (! fDisableOptimization) {
-
-          var optimized = requestUtils.optimize(request, pointer, options, this.$resourceName);
-          atomicCacheKeys = optimized.cachedAtomicKeys;
-
-          if (! fDisableCaching) {
-            cacheUtils.resource.buildData(pointer, atomicCacheKeys);
-          }
-
-          if (optimized.requestNotNeeded) {
-
-            this.$__meta.status = STATUS_FETCHED;
-
-            // we dont need to ask the server
-
-            if (fSuccess && angular.isFunction(fSuccess)) {
-              fSuccess(this);
-            }
-
-            return this;
-
-          } else {
-            request = optimized.request;
-          }
-        }
 
         if (! this.isReady()) {
           this.$__meta.status = STATUS_LOADING;
         }
 
-        // fetch data from the server
+        // generate all needed requests for this fetch (normally one but for
+        // nested resource we sometimes need to request more)
 
-        $http(request).then(function(fResult) {
+        var mainRequest, promises;
 
-          // give data to cache (we dont manipulate our resource directly)
+        mainRequest = requestUtils.build(pointer, options);
 
-          if (! fDisableCaching) {
-            atomicCacheKeys = cacheUtils.atomic.populateCache(options, _this.$resourceName, fResult.data);
-            cacheUtils.resource.buildData(pointer, atomicCacheKeys);
-          }
+        promises = [];
 
-          _this.$requestTimestamp = _.now();
+        promises.push(handleRequest(mainRequest, options, pointer, this.$resourceName));
 
-          // callback
+        // is there more requests to make (in case we got the nested option)?
 
-          _this.$__meta.status = STATUS_FETCHED;
+        if (! (_.isEmpty(options.nested))) {
 
-          if (fSuccess && angular.isFunction(fSuccess)) {
-            fSuccess(_this);
-          }
+          var _this = this;
 
-        }, function(fErrorData) {
+          // then wait for the mainRequest
 
-          _this.$__meta.status = STATUS_ERROR;
-          _this.$__meta.errors.push(fErrorData.data);
+          promises[0].then(function() {
 
-          if (fError && angular.isFunction(fError)) {
-            fError(_this);
-          }
+            promises = [];
 
-        });
+            var resourceNames = Object.keys(options.nested);
+            var resourceIds = {};
 
-        return this;
+            angular.forEach(resourceNames, function(rName) {
+              resourceIds[rName] = [];
+            });
+
+            var mainResource = [];
+
+            if (! (angular.isArray(_this.data))) {
+              mainResource = [ _this.data ];
+            } else {
+              mainResource = _this.data;
+            }
+
+            // which requests do we have to make?
+
+            angular.forEach(mainResource, function(rItem) {
+              angular.forEach(resourceNames, function(eResourceName) {
+                var key = options.nested[eResourceName];
+                var ids = rItem[key];
+                if (! angular.isArray(ids)) {
+                  ids = [ ids ];
+                }
+                resourceIds[eResourceName] = resourceIds[eResourceName].concat(ids);
+              });
+            });
+
+            // build requests
+
+            angular.forEach(resourceIds, function(rRequestedIds, rRequestedResourceName) {
+
+              var resIds = _.sort(_.unique(rRequestedIds));
+              var resOptions = defaultOptions;
+              var resPointer;
+
+              if (resIds.length === 1) {
+                resPointer = new ResourcePointer().build(rRequestedResourceName, resIds[0]);
+              } else {
+                resPointer = new ResourcePointer().buildCollection(rRequestedResourceName, resIds);
+              }
+
+              resPointer.parseCacheKey();
+
+              var resRequest = requestUtils.build(resPointer, resOptions);
+
+              promises.push(handleRequest(resRequest, resOptions, resPointer, rRequestedResourceName));
+
+            });
+
+            finalizeRequest(promises, _this);
+
+          }, function(eErrorData) {
+            errorCallback(_this, eErrorData);
+          });
+
+        } else {
+          finalizeRequest(promises, this);
+        }
+
+        return this; // return fetch()
       },
 
       // interval update handling
@@ -810,7 +949,7 @@
 
     /* @ resourceManipulator
      *
-     * sends a request to the server and returs a promise. when a local update object
+     * sends a request to the server and returns a promise. when a local update object
      * is given, change the object directly (to get direct feedback in the view)
      */
 
@@ -886,7 +1025,7 @@
       data = rData;
 
       if (data.type === TYPE_COLLECTION) {
-        data.collectionArray = _.unique(data.collectionArray).sort();
+        data.collectionArray = _.sort(_.unique(data.collectionArray));
       }
 
       pointer = new ResourcePointer(rPath, rVars, data).parseCacheKey();
@@ -899,6 +1038,10 @@
 
         if (rData.type !== TYPE_ONE && ! _.isEmpty(rOptions.sideload)) {
           throw 'ResourceFactoryError: resources with array data cant handle sideloading';
+        }
+
+        if (! _.isEmpty(rOptions.sideload) && ! _.isEmpty(rOptions.nested)) {
+          throw 'ResourceFactoryError: cant have a sideloading and nested option at the same time';
         }
 
         if (ALLOWED_RETRIEVAL_METHODS.indexOf(options.method) === -1) {
@@ -939,9 +1082,7 @@
 
       var vars = rVars || {};
 
-      function _delegate(rResourceName, rOptions, rData) {
-
-        var options;
+      function _isValid() {
 
         if (! rPath) {
           throw 'ResourceServiceError: path is missing';
@@ -950,6 +1091,14 @@
         if (! angular.isObject(vars)) {
           throw 'ResourceServiceError: path vars parameter must be an object';
         }
+
+      }
+
+      function _delegate(rResourceName, rOptions, rData) {
+
+        var options;
+
+        _isValid();
 
         if (! (rResourceName && typeof rResourceName === 'string')) {
           throw 'ResourceServiceError: resource name is missing or is not a string';
@@ -965,21 +1114,15 @@
       }
 
       function _manipulate(rOptions, rLocalUpdates) {
+        var options = rOptions || {};
 
-        var options;
-
-        if (! rPath) {
-          throw 'ResourceServiceError: path is missing';
-        }
+        _isValid();
 
         if (! angular.isObject(vars)) {
-          throw 'ResourceServiceError: path vars parameter must be an object';
+          throw 'ResourceServiceError: options parameter must be an object';
         }
 
-        options = rOptions || {};
-
         return resourceManipulator(rPath, vars, options, rLocalUpdates);
-
       }
 
       // public interface
@@ -1015,8 +1158,20 @@
 
         // reset (all) caches
 
-        reset: function(rKey) {
+        reset: function(rKey, rIds) {
           if (rKey) {
+            if (rIds) {
+              var ids = rIds;
+              if (! angular.isArray(rIds)) {
+                ids = [ rIds ];
+              }
+              angular.forEach(ids, function(eId) {
+                var pointer = new ResourcePointer().build(rKey, eId);
+                pointer.parseCacheKey();
+                atomicCache.reset(pointer.cacheKey);
+              });
+              return true;
+            }
             atomicCache.reset(rKey);
             resourceCache.reset(rKey);
           } else {

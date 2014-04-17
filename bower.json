@@ -1,6 +1,6 @@
 {
   "name": "angular-watch-resource",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "main": "dist/angular-watch-resource.js",
   "dependencies": {
     "angular": "1.2.16"

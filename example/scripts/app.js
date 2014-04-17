@@ -5,7 +5,7 @@
 var UPDATE_INTERVAL = 10000;
 var DEFAULT_USER_ID = 545316;
 
-var app = angular.module('app', [ 'ngWatchResource' ]);
+var app = angular.module('app', [ 'resource.service' ]);
 
 app.config(function(ResourceConfigurationProvider) {
   ResourceConfigurationProvider.setBasePath('https://api.soundcloud.com/');
