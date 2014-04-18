@@ -123,17 +123,17 @@ module.exports = function (grunt) {
         files: {
           '<%= yeoman.dist %>/<%= npm.name %>.js': ['<%= yeoman.dist %>/<%= npm.name %>.js']
         }
-      },
+      }
+    },
 
-      bump: {
-        options: {
-          files: [ 'bower.json', 'package.json' ],
-          commit: false,
-          createTag: true,
-          tagName: '%VERSION%',
-          tagMessage: 'Release %VERSION%',
-          push: false
-        }
+    bump: {
+      options: {
+        files: [ 'bower.json', 'package.json' ],
+        commit: false,
+        createTag: true,
+        tagName: '%VERSION%',
+        tagMessage: 'Release %VERSION%',
+        push: false
       }
     }
   });

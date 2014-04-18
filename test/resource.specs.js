@@ -90,6 +90,7 @@ beforeEach(function () {
       resourcesMock.users[2]
     ];
 
+    $http.when( 'GET', API_BASE_PATH + '/users?id[]=512' ).respond(200, [ resourcesMock.users[0] ] );
     $http.when( 'GET', API_BASE_PATH + '/users?id[]=12&id[]=42&id[]=712').respond(200, collection);
     $http.when( 'GET', API_BASE_PATH + '/pages?slug[]=a&slug[]=b&slug[]=c').respond(200, resourcesMock.pages);
 
@@ -572,6 +573,37 @@ describe('ResourceService', function() {
         expect(single_resource.data.name).toEqual('Paul');
         var another_single_resource = Resource('/users/:id', { id: 12 }).one('users');
         expect(another_single_resource.data.name).toEqual('Peter');
+      });
+
+    });
+
+    describe('optimized requests', function() {
+
+      var resource;
+
+      beforeEach(function() {
+        resource = Resource('/users').collection('users', [ 712, 42, 12 ]);
+        $http.expect( 'GET', API_BASE_PATH + '/users?id[]=12&id[]=42&id[]=712' );
+        $http.flush();
+      });
+
+      afterEach(function() {
+        $http.verifyNoOutstandingExpectation();
+        $http.verifyNoOutstandingRequest();
+      });
+
+      it ('gets parts of the collection from cache, others from the server', function() {
+
+        var another_resource = Resource('users').collection('users', [ 512, 712, 42, 12 ]);
+
+        $http.expect( 'GET', API_BASE_PATH + '/users?id[]=512' );
+        $http.flush();
+
+        expect(another_resource.data[0]).toEqual(resourcesMock.users[0]);
+        expect(another_resource.data[1]).toEqual(resourcesMock.users[1]);
+        expect(another_resource.data[2]).toEqual(resourcesMock.users[3]);
+        expect(another_resource.data[3]).toEqual(resourcesMock.users[2]);
+
       });
 
     });

@@ -1,7 +1,7 @@
 {
   "name": "angular-watch-resource",
   "description": "Model Layer for AngularJS based on $watch pattern",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "authors": [
     "marmorkuchen.net <andreas@marmorkuchen.net>"
   ],

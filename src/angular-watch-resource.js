@@ -727,7 +727,8 @@
 
           deferred = $q.defer();
 
-          var request, optimized, pointer, options, atomicCacheKeys;
+          var request, optimized, pointer, options;
+          var atomicCacheKeys, cachedAtomicCacheKeys;
 
           request = rRequestData;
           options = rOptions;
@@ -735,10 +736,10 @@
 
           if (! fDisableOptimization) {
             optimized = requestUtils.optimize(request, pointer, options, resourceName);
-            atomicCacheKeys = optimized.cachedAtomicKeys;
+            cachedAtomicCacheKeys = optimized.cachedAtomicKeys;
 
             if (! fDisableCaching) {
-              cacheUtils.resource.buildData(pointer, atomicCacheKeys);
+              cacheUtils.resource.buildData(pointer, cachedAtomicCacheKeys);
             }
 
             if (optimized.requestNotNeeded) {
@@ -758,6 +759,13 @@
 
             if (! fDisableCaching) {
               atomicCacheKeys = cacheUtils.atomic.populateCache(options, resourceName, fResult.data);
+
+              // merge fetched with cached resource cacheKeys when given
+
+              if (cachedAtomicCacheKeys && cachedAtomicCacheKeys.length > 0) {
+                atomicCacheKeys = atomicCacheKeys.concat(cachedAtomicCacheKeys);
+              }
+
               cacheUtils.resource.buildData(pointer, atomicCacheKeys);
             }
 
