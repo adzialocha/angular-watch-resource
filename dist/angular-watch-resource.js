@@ -1,4 +1,4 @@
-/*! angular-watch-resource.js v0.5.1 18-04-2014 */
+/*! angular-watch-resource.js v0.5.2 19-04-2014 */
 (function(window, angular, undefined) {
   "use strict";
   var ngWatchResource = angular.module("resource.service", []);
@@ -455,15 +455,16 @@
         function handleRequest(rRequestData, rOptions, rPointer, resourceName) {
           var deferred;
           deferred = $q.defer();
-          var request, optimized, pointer, options, atomicCacheKeys;
+          var request, optimized, pointer, options;
+          var atomicCacheKeys, cachedAtomicCacheKeys;
           request = rRequestData;
           options = rOptions;
           pointer = rPointer;
           if (!fDisableOptimization) {
             optimized = requestUtils.optimize(request, pointer, options, resourceName);
-            atomicCacheKeys = optimized.cachedAtomicKeys;
+            cachedAtomicCacheKeys = optimized.cachedAtomicKeys;
             if (!fDisableCaching) {
-              cacheUtils.resource.buildData(pointer, atomicCacheKeys);
+              cacheUtils.resource.buildData(pointer, cachedAtomicCacheKeys);
             }
             if (optimized.requestNotNeeded) {
               deferred.resolve(false);
@@ -475,6 +476,9 @@
           $http(request).then(function(fResult) {
             if (!fDisableCaching) {
               atomicCacheKeys = cacheUtils.atomic.populateCache(options, resourceName, fResult.data);
+              if (cachedAtomicCacheKeys && cachedAtomicCacheKeys.length > 0) {
+                atomicCacheKeys = atomicCacheKeys.concat(cachedAtomicCacheKeys);
+              }
               cacheUtils.resource.buildData(pointer, atomicCacheKeys);
             }
             deferred.resolve(true);
