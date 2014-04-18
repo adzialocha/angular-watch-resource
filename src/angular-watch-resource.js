@@ -64,7 +64,7 @@
     var FORCED_ID_START = 1;
 
     var ALLOWED_RETRIEVAL_METHODS = [ 'GET', 'HEAD' ];
-    var ALLOWED_MANIPULATION_METHOD = [ 'PUT', 'POST', 'DELETE' ];
+    var ALLOWED_MANIPULATION_METHODS = [ 'PUT', 'POST', 'DELETE' ];
 
     var DEFAULT_MANIPULATION_METHOD = 'POST';
 
@@ -449,7 +449,8 @@
         var cacheKeys = [];
         angular.forEach(cDataArray, function(dItem) {
           var pointer = new ResourcePointer().build(cResourceName, dItem);
-          cacheKeys.push(pointer.parseCacheKey());
+          pointer.parseCacheKey();
+          cacheKeys.push(pointer.cacheKey);
         });
         return cacheKeys;
       },
@@ -833,7 +834,10 @@
 
         // is there more requests to make (in case we got the nested option)?
 
-        if (! (_.isEmpty(options.nested))) {
+        if (_.isEmpty(options.nested)) {
+          finalizeRequest(promises, this);
+
+        } else {
 
           var _this = this;
 
@@ -899,8 +903,6 @@
             errorCallback(_this, eErrorData);
           });
 
-        } else {
-          finalizeRequest(promises, this);
         }
 
         return this; // return fetch()
@@ -969,7 +971,7 @@
 
       options = _.update(defaultOptions, options);
 
-      if (ALLOWED_MANIPULATION_METHOD.indexOf(options.method) === -1) {
+      if (ALLOWED_MANIPULATION_METHODS.indexOf(options.method) === -1) {
         throw 'ResourceServiceError: method is not allowed';
       }
 

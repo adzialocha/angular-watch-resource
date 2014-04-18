@@ -470,17 +470,20 @@ Different from the retrieval methods the manipulation methods return a *promise*
 
 * **Resource**().**reset**([resourcePointer or -name], [resourceId or Array of Ids])
 
-  Clears the cache (when no pointer is given).
+  Clears the whole cache, a collection or a specific resource.
 
   **Example:**
 
   ```
-  // clear a single resource
+  // clear single resource
   Resource().reset('/users/221'); // or..
   Resource().reset('users', 221);
 
-  // clear a collection of resources
+  // clear collection of resources
   Resource().reset('users', [ 221, 222, 223, 224, 827 ] );
+
+  // clear everything
+  Resource().reset();
 
   ```
 

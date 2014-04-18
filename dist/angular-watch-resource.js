@@ -1,4 +1,4 @@
-/*! angular-watch-resource.js v0.5.0 17-04-2014 */
+/*! angular-watch-resource.js v0.5.1 18-04-2014 */
 (function(window, angular, undefined) {
   "use strict";
   var ngWatchResource = angular.module("resource.service", []);
@@ -45,7 +45,7 @@
     var ID_KEY = "id";
     var FORCED_ID_START = 1;
     var ALLOWED_RETRIEVAL_METHODS = [ "GET", "HEAD" ];
-    var ALLOWED_MANIPULATION_METHOD = [ "PUT", "POST", "DELETE" ];
+    var ALLOWED_MANIPULATION_METHODS = [ "PUT", "POST", "DELETE" ];
     var DEFAULT_MANIPULATION_METHOD = "POST";
     var DEFAULT_COLLECTION_KEY = "id";
     var DEFAULT_ARRAY = [];
@@ -287,7 +287,8 @@
         var cacheKeys = [];
         angular.forEach(cDataArray, function(dItem) {
           var pointer = new ResourcePointer().build(cResourceName, dItem);
-          cacheKeys.push(pointer.parseCacheKey());
+          pointer.parseCacheKey();
+          cacheKeys.push(pointer.cacheKey);
         });
         return cacheKeys;
       },
@@ -512,7 +513,9 @@
         mainRequest = requestUtils.build(pointer, options);
         promises = [];
         promises.push(handleRequest(mainRequest, options, pointer, this.$resourceName));
-        if (!_.isEmpty(options.nested)) {
+        if (_.isEmpty(options.nested)) {
+          finalizeRequest(promises, this);
+        } else {
           var _this = this;
           promises[0].then(function() {
             promises = [];
@@ -554,8 +557,6 @@
           }, function(eErrorData) {
             errorCallback(_this, eErrorData);
           });
-        } else {
-          finalizeRequest(promises, this);
         }
         return this;
       },
@@ -595,7 +596,7 @@
         options.method = DEFAULT_MANIPULATION_METHOD;
       }
       options = _.update(defaultOptions, options);
-      if (ALLOWED_MANIPULATION_METHOD.indexOf(options.method) === -1) {
+      if (ALLOWED_MANIPULATION_METHODS.indexOf(options.method) === -1) {
         throw "ResourceServiceError: method is not allowed";
       }
       if (!(!_.isEmpty(rLocalUpdates) && rLocalUpdates.name && rLocalUpdates.id && rLocalUpdates.manipulate)) {
