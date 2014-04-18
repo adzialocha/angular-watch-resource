@@ -130,9 +130,7 @@ module.exports = function (grunt) {
       options: {
         files: [ 'bower.json', 'package.json' ],
         commit: false,
-        createTag: true,
-        tagName: '%VERSION%',
-        tagMessage: 'Release %VERSION%',
+        createTag: false,
         push: false
       }
     }
