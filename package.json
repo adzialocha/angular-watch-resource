@@ -1,6 +1,6 @@
 {
   "name": "angular-watch-resource",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "dependencies": {},
   "devDependencies": {
     "grunt": "~0.4.4",
@@ -11,6 +11,7 @@
     "grunt-contrib-clean": "~0.5.0",
     "grunt-contrib-watch": "~0.6.1",
     "grunt-contrib-jasmine": "~0.6.1",
+    "grunt-bump": "~0.0.13",
     "load-grunt-tasks": "~0.4.0"
   },
   "engines": {
