@@ -1,4 +1,4 @@
-/*! angular-watch-resource.js v0.5.2 19-04-2014 */
+/*! angular-watch-resource.js v0.5.3 01-08-2014 */
 (function(window, angular, undefined) {
   "use strict";
   var ngWatchResource = angular.module("resource.service", []);
@@ -60,6 +60,7 @@
     var defaultOptions = {
       interval: 0,
       silent: false,
+      cacheKey: undefined,
       sideload: {},
       nested: {},
       withCredentials: false,
@@ -348,7 +349,7 @@
       };
       return this;
     };
-    ResourcePointer.prototype.parseCacheKey = function() {
+    ResourcePointer.prototype.parseCacheKey = function(rCustomCacheKey) {
       var path, keys, i, len;
       path = this._path;
       path = path.replace(/\\:/g, ":");
@@ -367,7 +368,11 @@
         var hashed = _.hash(this._data.collectionArray.join("."));
         path = path + "?" + this._data.collectionKey + "=" + hashed;
       }
-      this.cacheKey = path;
+      if (rCustomCacheKey) {
+        this.cacheKey = rCustomCacheKey;
+      } else {
+        this.cacheKey = path;
+      }
       return this;
     };
     ResourcePointer.prototype.serializeUrl = function(sParams, sOptimizedCollectionArray) {
@@ -634,7 +639,7 @@
       if (data.type === TYPE_COLLECTION) {
         data.collectionArray = _.sort(_.unique(data.collectionArray));
       }
-      pointer = new ResourcePointer(rPath, rVars, data).parseCacheKey();
+      pointer = new ResourcePointer(rPath, rVars, data).parseCacheKey(rOptions.cacheKey);
       if (!resourceCache.exists(pointer.cacheKey)) {
         var options = _.update(defaultOptions, rOptions);
         if (rData.type !== TYPE_ONE && !_.isEmpty(rOptions.sideload)) {

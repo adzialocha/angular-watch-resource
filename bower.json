@@ -1,7 +1,7 @@
 {
   "name": "angular-watch-resource",
   "description": "Model Layer for AngularJS based on $watch pattern",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "authors": [
     "marmorkuchen.net <andreas@marmorkuchen.net>"
   ],
@@ -31,10 +31,10 @@
     "test"
   ],
   "dependencies": {
-    "angular": "1.2.16"
+    "angular": ">1.2.0"
   },
   "devDependencies": {
-    "angular-mocks": "1.2.16"
+    "angular-mocks": ">1.2.0"
   },
   "private": false,
   "license": "MIT"

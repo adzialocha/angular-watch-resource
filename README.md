@@ -500,6 +500,8 @@ Default Options:
   interval: 0,             // interval in ms for frequent resource update requests
   silent: false,           // true to enable silent mode, does not send a request on init
 
+  cacheKey: undefined,     // use a custom cache key
+
   sideload: {},            // read -> sideloading resources option (below)
   nested: {},              // read -> nested resources option (below)
 

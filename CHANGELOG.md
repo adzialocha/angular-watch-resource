@@ -1,6 +1,13 @@
 Changelog
 ======================
 
+### 0.5.3 (01.08.2014)
+
+**Fixes**
+
+* correct angular dependecy
+* more flexible custom cache keys for resources
+
 ### 0.5.2 (19.04.2014)
 
 **Fixes**

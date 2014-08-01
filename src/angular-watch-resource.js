@@ -86,6 +86,7 @@
     var defaultOptions = {
       interval: 0,
       silent: false,
+      cacheKey: undefined,
       sideload: {},
       nested: {},
       withCredentials: false,
@@ -542,7 +543,7 @@
 
     // parse variables and collection data in path to generate a cacheKey
 
-    ResourcePointer.prototype.parseCacheKey = function() {
+    ResourcePointer.prototype.parseCacheKey = function(rCustomCacheKey) {
       var path, keys, i, len;
 
       path = this._path;
@@ -568,7 +569,12 @@
         path = path + '?' + this._data.collectionKey + '=' + hashed;
       }
 
-      this.cacheKey = path;
+      if (rCustomCacheKey) {
+        this.cacheKey = rCustomCacheKey;
+      } else {
+        this.cacheKey = path;
+      }
+
       return this;
     };
 
@@ -1038,7 +1044,7 @@
         data.collectionArray = _.sort(_.unique(data.collectionArray));
       }
 
-      pointer = new ResourcePointer(rPath, rVars, data).parseCacheKey();
+      pointer = new ResourcePointer(rPath, rVars, data).parseCacheKey(rOptions.cacheKey);
 
       if (! resourceCache.exists(pointer.cacheKey)) {
 
