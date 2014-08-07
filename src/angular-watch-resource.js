@@ -406,24 +406,27 @@
 
       updateData: function(rPointer) {
 
-        var data, item, atomicCacheKeys;
-
-        atomicCacheKeys = [];
-
-        cachedAtomicKeys = cacheUtils.atomic.cacheKeyArray(
-          rPointer._data.collectionArray,
-          rPointer._vars.res
-        );
+        var data, item, cachedAtomicKeys;
 
         if (rPointer._data.type === TYPE_ONE) {
-          item = atomicCache.get(cachedAtomicKeys[0]);
+
+          item = atomicCache.get(rPointer.cacheKey);
           data = item.data;
+
         } else {
+
           data = [];
+
+          cachedAtomicKeys = cacheUtils.atomic.cacheKeyArray(
+            rPointer._data.collectionArray,
+            rPointer._vars.res
+          );
+
           angular.forEach(cachedAtomicKeys, function(aKey) {
             item = atomicCache.get(aKey);
             data.push(item.data);
           });
+
         }
 
         resourceCache.update(rPointer.cacheKey, data);
@@ -557,6 +560,7 @@
     ResourcePointer.prototype.build = function(rResourceName, rId) {
       this._path = rResourceName + '/:id';
       this._vars[ID_KEY] = rId;
+      this._vars.res = rResourceName;
       return this;
     };
 
@@ -1114,9 +1118,7 @@
 
       } else {
         resource = resourceCache.get(pointer.cacheKey);
-
-        cacheUtils.resource.buildData(pointer, atomicCacheKeys);
-
+        cacheUtils.resource.updateData(pointer);
       }
 
       return resource;

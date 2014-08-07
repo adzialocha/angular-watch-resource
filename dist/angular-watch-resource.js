@@ -1,4 +1,4 @@
-/*! angular-watch-resource.js v0.5.3 01-08-2014 */
+/*! angular-watch-resource.js v0.5.3 07-08-2014 */
 (function(window, angular, undefined) {
   "use strict";
   var ngWatchResource = angular.module("resource.service", []);
@@ -257,6 +257,22 @@
         }
         resourceCache.update(rPointer.cacheKey, data);
         return true;
+      },
+      updateData: function(rPointer) {
+        var data, item, cachedAtomicKeys;
+        if (rPointer._data.type === TYPE_ONE) {
+          item = atomicCache.get(rPointer.cacheKey);
+          data = item.data;
+        } else {
+          data = [];
+          cachedAtomicKeys = cacheUtils.atomic.cacheKeyArray(rPointer._data.collectionArray, rPointer._vars.res);
+          angular.forEach(cachedAtomicKeys, function(aKey) {
+            item = atomicCache.get(aKey);
+            data.push(item.data);
+          });
+        }
+        resourceCache.update(rPointer.cacheKey, data);
+        return true;
       }
     };
     cacheUtils.atomic = {
@@ -338,6 +354,7 @@
     ResourcePointer.prototype.build = function(rResourceName, rId) {
       this._path = rResourceName + "/:id";
       this._vars[ID_KEY] = rId;
+      this._vars.res = rResourceName;
       return this;
     };
     ResourcePointer.prototype.buildCollection = function(rResourceName, rIds) {
@@ -661,6 +678,7 @@
         }
       } else {
         resource = resourceCache.get(pointer.cacheKey);
+        cacheUtils.resource.updateData(pointer);
       }
       return resource;
     };
