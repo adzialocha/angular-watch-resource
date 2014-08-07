@@ -404,14 +404,20 @@
       // update an existing resource pointer when there is
       // changed atomic resources
 
-      updateData: function(rPointer) {
+      updateData: function(rPointer, rResourceName, rLastUpdate) {
 
-        var data, item, cachedAtomicKeys;
+        var data, item, cachedAtomicKeys, doUpdate;
+
+        doUpdate = false;
 
         if (rPointer._data.type === TYPE_ONE) {
 
           item = atomicCache.get(rPointer.cacheKey);
-          data = item.data;
+
+          if (item && item.$updatedTimestamp > rLastUpdate) {
+            doUpdate = true;
+            data = item.data;
+          }
 
         } else {
 
@@ -419,19 +425,26 @@
 
           cachedAtomicKeys = cacheUtils.atomic.cacheKeyArray(
             rPointer._data.collectionArray,
-            rPointer._vars.res
+            rResourceName
           );
 
           angular.forEach(cachedAtomicKeys, function(aKey) {
             item = atomicCache.get(aKey);
+
+            if (item.$updatedTimestamp > rLastUpdate) {
+              doUpdate = true;
+            }
+
             data.push(item.data);
           });
 
         }
 
-        resourceCache.update(rPointer.cacheKey, data);
+        if (data && doUpdate) {
+          resourceCache.update(rPointer.cacheKey, data);
+        }
 
-        return true;
+        return doUpdate;
 
       }
 
@@ -1118,7 +1131,7 @@
 
       } else {
         resource = resourceCache.get(pointer.cacheKey);
-        cacheUtils.resource.updateData(pointer);
+        cacheUtils.resource.updateData(pointer, rResourceName, resource.$updatedTimestamp);
       }
 
       return resource;
