@@ -431,7 +431,7 @@
           angular.forEach(cachedAtomicKeys, function(aKey) {
             item = atomicCache.get(aKey);
 
-            if (item.$updatedTimestamp > rLastUpdate) {
+            if (item && item.$updatedTimestamp > rLastUpdate) {
               doUpdate = true;
             }
 

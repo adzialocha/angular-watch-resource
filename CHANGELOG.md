@@ -1,6 +1,12 @@
 Changelog
 ======================
 
+### 0.5.4 (11.08.2014)
+
+**Fixes**
+
+* minor fix in updateData function
+
 ### 0.5.3 (01.08.2014)
 
 **Fixes**

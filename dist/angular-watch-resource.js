@@ -1,4 +1,4 @@
-/*! angular-watch-resource.js v0.5.3 07-08-2014 */
+/*! angular-watch-resource.js v0.5.4 11-08-2014 */
 (function(window, angular, undefined) {
   "use strict";
   var ngWatchResource = angular.module("resource.service", []);
@@ -272,7 +272,7 @@
           cachedAtomicKeys = cacheUtils.atomic.cacheKeyArray(rPointer._data.collectionArray, rResourceName);
           angular.forEach(cachedAtomicKeys, function(aKey) {
             item = atomicCache.get(aKey);
-            if (item.$updatedTimestamp > rLastUpdate) {
+            if (item && item.$updatedTimestamp > rLastUpdate) {
               doUpdate = true;
             }
             data.push(item.data);
