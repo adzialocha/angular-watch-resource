@@ -628,7 +628,7 @@
         }
       }
     };
-    var resourceManipulator = function(rPath, rVars, rOptions, rLocalUpdates) {
+    var resourceManipulator = function(rPath, rVars, rOptions, rLocalUpdates, rResourceName) {
       var deferred, pointer, resource, options, resourceName;
       deferred = $q.defer();
       options = rOptions;
@@ -639,29 +639,30 @@
       if (ALLOWED_MANIPULATION_METHODS.indexOf(options.method) === -1) {
         throw "ResourceServiceError: method is not allowed";
       }
-      if (!(!_.isEmpty(rLocalUpdates) && rLocalUpdates.name && rLocalUpdates.id && rLocalUpdates.manipulate)) {
-        throw "ResourceServiceError: resource manipulation info is missing";
-      }
-      if (!angular.isFunction(rLocalUpdates.manipulate)) {
-        throw "ResourceServiceError: manipulate property must be a function";
-      }
-      var atomic = new ResourcePointer();
-      atomic.build(rLocalUpdates.name, rLocalUpdates.id);
-      atomic.parseCacheKey();
-      if (!_.isEmpty(rLocalUpdates) && atomicCache.exists(atomic.cacheKey)) {
-        var data = atomicCache.get(atomic.cacheKey).data;
-        resourceName = rLocalUpdates.name;
-        rLocalUpdates.manipulate(data);
-        atomicCache.update(atomic.cacheKey, data, true);
+      if (!_.isEmpty(rLocalUpdates)) {
+        if (!(!_.isEmpty(rLocalUpdates) && rLocalUpdates.name && rLocalUpdates.id && rLocalUpdates.manipulate)) {
+          throw "ResourceServiceError: resource manipulation info is missing";
+        }
+        if (!angular.isFunction(rLocalUpdates.manipulate)) {
+          throw "ResourceServiceError: manipulate property must be a function";
+        }
+        var atomic = new ResourcePointer();
+        atomic.build(rLocalUpdates.name, rLocalUpdates.id);
+        atomic.parseCacheKey();
+        if (atomicCache.exists(atomic.cacheKey)) {
+          var data = atomicCache.get(atomic.cacheKey).data;
+          resourceName = rLocalUpdates.name;
+          rLocalUpdates.manipulate(data);
+          atomicCache.update(atomic.cacheKey, data, true);
+        }
       }
       pointer = new ResourcePointer(rPath, rVars).parseCacheKey();
-      pointer.cacheKey = atomic.cacheKey;
-      resource = new Resource(pointer, resourceName || undefined, options);
+      resource = new Resource(pointer, rResourceName, options);
       resource.fetch(function() {
         deferred.resolve(resource);
       }, function() {
         deferred.reject(resource);
-      }, true, resourceName ? false : true);
+      }, true);
       return deferred.promise;
     };
     var resourceFactory = function(rPath, rVars, rResourceName, rOptions, rData) {
@@ -720,13 +721,16 @@
         }
         return resourceFactory(rPath, vars, rResourceName, options, rData);
       }
-      function _manipulate(rOptions, rLocalUpdates) {
+      function _manipulate(rOptions, rLocalUpdates, rResourceName) {
         var options = rOptions || {};
         _isValid();
+        if (!(rResourceName && typeof rResourceName === "string")) {
+          throw "ResourceServiceError: resource name is missing or is not a string";
+        }
         if (!angular.isObject(vars)) {
           throw "ResourceServiceError: options parameter must be an object";
         }
-        return resourceManipulator(rPath, vars, options, rLocalUpdates);
+        return resourceManipulator(rPath, vars, options, rLocalUpdates, rResourceName);
       }
       return {
         all: function(rResourceName, rOptions) {
@@ -751,8 +755,8 @@
             collectionArray: rCollection
           });
         },
-        send: function(rOptions, rLocalUpdates) {
-          return _manipulate(rOptions, rLocalUpdates);
+        send: function(rOptions, rLocalUpdates, rResourceName) {
+          return _manipulate(rOptions, rLocalUpdates, rResourceName);
         },
         reset: function(rKey, rIds) {
           if (rKey) {

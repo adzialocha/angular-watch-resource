@@ -1026,7 +1026,7 @@
      * is given, change the object directly (to get direct feedback in the view)
      */
 
-    var resourceManipulator = function(rPath, rVars, rOptions, rLocalUpdates) {
+    var resourceManipulator = function(rPath, rVars, rOptions, rLocalUpdates, rResourceName) {
 
       var deferred, pointer, resource, options, resourceName;
 
@@ -1048,37 +1048,39 @@
 
       // update local data already before we got server response
 
-      if (! (!(_.isEmpty(rLocalUpdates)) && rLocalUpdates.name && rLocalUpdates.id && rLocalUpdates.manipulate)) {
-        throw 'ResourceServiceError: resource manipulation info is missing';
-      }
+      if (! _.isEmpty(rLocalUpdates)) {
 
-      if (! (angular.isFunction(rLocalUpdates.manipulate))) {
-        throw 'ResourceServiceError: manipulate property must be a function';
-      }
+        if (! (!(_.isEmpty(rLocalUpdates)) && rLocalUpdates.name && rLocalUpdates.id && rLocalUpdates.manipulate)) {
+          throw 'ResourceServiceError: resource manipulation info is missing';
+        }
 
-      var atomic = new ResourcePointer();
-      atomic.build(rLocalUpdates.name, rLocalUpdates.id);
-      atomic.parseCacheKey();
+        if (! (angular.isFunction(rLocalUpdates.manipulate))) {
+          throw 'ResourceServiceError: manipulate property must be a function';
+        }
 
-      if (! _.isEmpty(rLocalUpdates) && atomicCache.exists(atomic.cacheKey)) {
-        var data = atomicCache.get(atomic.cacheKey).data;
-        resourceName = rLocalUpdates.name;
-        rLocalUpdates.manipulate(data);
-        atomicCache.update(atomic.cacheKey, data, true);
+        var atomic = new ResourcePointer();
+        atomic.build(rLocalUpdates.name, rLocalUpdates.id);
+        atomic.parseCacheKey();
+
+        if (atomicCache.exists(atomic.cacheKey)) {
+          var data = atomicCache.get(atomic.cacheKey).data;
+          resourceName = rLocalUpdates.name;
+          rLocalUpdates.manipulate(data);
+          atomicCache.update(atomic.cacheKey, data, true);
+        }
+
       }
 
       // request to server
 
       pointer = new ResourcePointer(rPath, rVars).parseCacheKey();
-      pointer.cacheKey = atomic.cacheKey; // route cache to the resource we want to manipulate
-
-      resource = new Resource(pointer, resourceName || undefined, options);
+      resource = new Resource(pointer, rResourceName, options);
 
       resource.fetch(function(){
         deferred.resolve(resource);
       }, function() {
         deferred.reject(resource);
-      }, true, resourceName ? false : true);
+      }, true);
 
       return deferred.promise;
 
@@ -1145,7 +1147,7 @@
         if (resource.isReady()) {
           cacheUtils.resource.updateData(pointer, rResourceName, resource.$updatedTimestamp); 
         }
-        
+
       }
 
       return resource;
@@ -1192,16 +1194,20 @@
         return resourceFactory(rPath, vars, rResourceName, options, rData);
       }
 
-      function _manipulate(rOptions, rLocalUpdates) {
+      function _manipulate(rOptions, rLocalUpdates, rResourceName) {
         var options = rOptions || {};
 
         _isValid();
+
+        if (! (rResourceName && typeof rResourceName === 'string')) {
+          throw 'ResourceServiceError: resource name is missing or is not a string';
+        }
 
         if (! angular.isObject(vars)) {
           throw 'ResourceServiceError: options parameter must be an object';
         }
 
-        return resourceManipulator(rPath, vars, options, rLocalUpdates);
+        return resourceManipulator(rPath, vars, options, rLocalUpdates, rResourceName);
       }
 
       // public interface
@@ -1231,8 +1237,8 @@
 
         // change single resource (DELETE, POST and PUT) methods
 
-        send: function(rOptions, rLocalUpdates) {
-          return _manipulate(rOptions, rLocalUpdates);
+        send: function(rOptions, rLocalUpdates, rResourceName) {
+          return _manipulate(rOptions, rLocalUpdates, rResourceName);
         },
 
         // reset (all) caches

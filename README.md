@@ -407,7 +407,7 @@ All of these methods return a initial *Resource* instance we can watch in our co
 
 Different from the retrieval methods the manipulation methods return a *promise* instead of a Resource instance - since we dont want to watch single server requests like these.
 
-* **Resource**(resourcePath [,resourceVars]).**send**([resourceOptions], [localUpdate])
+* **Resource**(resourcePath [,resourceVars]).**send**([resourceOptions], [localUpdate], resourceName)
 
   Sends a POST request to the given path (or DELETE, PUT when set in options) and optionally changes the data of the Resource before the server gets informed.
 
@@ -433,6 +433,9 @@ Different from the retrieval methods the manipulation methods return a *promise*
 
   Changing your local data like this is only possible when the resource already exists in your cache.
 
+  - resourceName
+  name of the requested resource (for caching)
+
   **Example:**
 
   ```
@@ -445,13 +448,13 @@ Different from the retrieval methods the manipulation methods return a *promise*
       }
     },
     {
-      name: 'messages',
+      name: 'messages', // this doesnt have to be the same resource were sending this request to
       id: $scope.selectedMessage,
       manipulate: function (messageData) {
         messageData.subject = $scope.editor.subject;
         messageData.text = $scope.editor.text;
       }
-    }
+    }, 'messages' // this is the resource we are sending the POST to
   ).then(function() {
     alert('You succesfully updated your message');
   });

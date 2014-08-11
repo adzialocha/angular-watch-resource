@@ -6,6 +6,7 @@ Changelog
 **Fixes**
 
 * minor fix in updateData function
+* local resource manipulation of other data than the requested resource one
 
 ### 0.5.3 (01.08.2014)
 

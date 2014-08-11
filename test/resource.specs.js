@@ -652,7 +652,7 @@ describe('ResourceService', function() {
         manipulate: function(msg) {
           msg.text = 'This is a edited text.';
         }
-      });
+      }, 'messages');
     });
 
     it ('manipulates the data before server is being informed', function() {
