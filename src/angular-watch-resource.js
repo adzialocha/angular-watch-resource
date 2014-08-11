@@ -406,7 +406,7 @@
 
       updateData: function(rPointer, rResourceName, rLastUpdate) {
 
-        var data, item, cachedAtomicKeys, doUpdate;
+        var data, item, cachedAtomicKeys, doUpdate, cantFindItem;
 
         doUpdate = false;
 
@@ -422,6 +422,7 @@
         } else {
 
           data = [];
+          cantFindItem = false;
 
           cachedAtomicKeys = cacheUtils.atomic.cacheKeyArray(
             rPointer._data.collectionArray,
@@ -431,16 +432,24 @@
           angular.forEach(cachedAtomicKeys, function(aKey) {
             item = atomicCache.get(aKey);
 
-            if (item && item.$updatedTimestamp > rLastUpdate) {
-              doUpdate = true;
+            if (! item) {
+
+              cantFindItem = true;
+
+            } else {
+
+              if (item.$updatedTimestamp > rLastUpdate) {
+                doUpdate = true;
+              }
+
+              data.push(item.data);
             }
 
-            data.push(item.data);
           });
 
         }
 
-        if (data && doUpdate) {
+        if (!cantFindItem && data && doUpdate) {
           resourceCache.update(rPointer.cacheKey, data);
         }
 
@@ -1130,8 +1139,13 @@
         }
 
       } else {
+
         resource = resourceCache.get(pointer.cacheKey);
-        cacheUtils.resource.updateData(pointer, rResourceName, resource.$updatedTimestamp);
+
+        if (resource.isReady()) {
+          cacheUtils.resource.updateData(pointer, rResourceName, resource.$updatedTimestamp); 
+        }
+        
       }
 
       return resource;
