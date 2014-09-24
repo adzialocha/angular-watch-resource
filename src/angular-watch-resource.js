@@ -330,6 +330,9 @@
           return null;
         }
         var item = this.get(pCacheKey);
+        if (! item) {
+          return false;
+        }
         if (! pUpdateIsLocal) {
           item.$updatedTimestamp = _.now();
         }

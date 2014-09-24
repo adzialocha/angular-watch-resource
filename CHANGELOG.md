@@ -1,6 +1,12 @@
 Changelog
 ======================
 
+### 0.5.5 (24.09.2014)
+
+**Fixes**
+
+* minor fix in cache update method
+
 ### 0.5.4 (11.08.2014)
 
 **Fixes**

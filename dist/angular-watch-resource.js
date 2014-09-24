@@ -1,4 +1,4 @@
-/*! angular-watch-resource.js v0.5.4 11-08-2014 */
+/*! angular-watch-resource.js v0.5.5 24-09-2014 */
 (function(window, angular, undefined) {
   "use strict";
   var ngWatchResource = angular.module("resource.service", []);
@@ -219,6 +219,9 @@
           return null;
         }
         var item = this.get(pCacheKey);
+        if (!item) {
+          return false;
+        }
         if (!pUpdateIsLocal) {
           item.$updatedTimestamp = _.now();
         }
