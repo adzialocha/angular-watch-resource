@@ -309,17 +309,11 @@
         atomicCache.update(pointer.cacheKey, cObject);
         return pointer.cacheKey;
       },
-      _insertSideloadData: function(cSideloadData, cSideloadKey, cResources) {
+      _insertSideloadData: function(cSideloadData, cResources) {
         var _this = this;
-        var resources;
-        if (cSideloadKey) {
-          resources = cResources[cSideloadKey];
-        } else {
-          resources = cResources;
-        }
         angular.forEach(Object.keys(cSideloadData), function(sKey) {
-          if (sKey in resources && angular.isArray(resources[sKey])) {
-            angular.forEach(resources[sKey], function(eItem) {
+          if (sKey in cResources && angular.isArray(cResources[sKey])) {
+            angular.forEach(cResources[sKey], function(eItem) {
               _this._insertData(cSideloadData[sKey], eItem);
             });
           }
@@ -344,7 +338,7 @@
       populateCache: function(cOptions, cResourceName, cObject) {
         var _this = this;
         var atomicCacheKeys = [];
-        var objectData;
+        var objectData, sideloadData;
         if (cOptions.dataKey) {
           objectData = cObject[cOptions.dataKey];
         } else {
@@ -356,9 +350,14 @@
           });
         } else {
           atomicCacheKeys.push(this._insertData(cResourceName, objectData));
-          if (!_.isEmpty(cOptions.sideload)) {
-            this._insertSideloadData(cOptions.sideload, cOptions.sideloadKey, cObject);
+        }
+        if (!_.isEmpty(cOptions.sideload)) {
+          if (cOptions.sideloadKey) {
+            sideloadData = cObject[cOptions.sideloadKey];
+          } else {
+            sideloadData = cObject;
           }
+          this._insertSideloadData(cOptions.sideload, sideloadData);
         }
         return atomicCacheKeys;
       }

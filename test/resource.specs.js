@@ -50,6 +50,15 @@ var resourcesMock = {
   }
 };
 
+var complexSideloadMock = {
+  events: resourcesMock.events,
+  included: {
+    users: resourcesMock.users,
+    organizations: resourcesMock.organizations,
+    productions: resourcesMock.productions
+  }
+};
+
 var editableResourceMock = {
   original: { id: 2001, text: 'This is a text.', subject: 'Hello World' },
   edited: { id: 2001, text: 'This is a edited text.', subject: 'Hello World' }
@@ -100,6 +109,8 @@ beforeEach(function () {
     };
 
     $http.when( 'GET', API_BASE_PATH + '/continents_with_key' ).respond(200, sideloadDataWithKey);
+
+    $http.when( 'GET', API_BASE_PATH + '/events_complex' ).respond(200, complexSideloadMock);
 
     var collection = [
       resourcesMock.users[1],
@@ -564,6 +575,41 @@ describe('ResourceService', function() {
       it ('populate the cache for further single resource requests', function() {
         var another_resource = Resource('/organizations/:id', { id: 6 }).one('organizations');
         expect(another_resource.data.id).toEqual(6);
+      });
+
+    });
+
+    describe('#fetch with sideload option', function() {
+
+      var resource;
+
+      beforeEach(function() {
+        resource = Resource('/events_complex').all('events', {
+          dataKey: 'events',
+          sideloadKey: 'included',
+          sideload: {
+            'productions': 'productions',
+            'organizations': 'organizations',
+            'users': 'users'
+          }
+        });
+        $http.expect( 'GET', API_BASE_PATH + '/events_complex' );
+        $http.flush();
+      });
+
+      afterEach(function() {
+        $http.verifyNoOutstandingExpectation();
+        $http.verifyNoOutstandingRequest();
+      });
+
+      it ('populate the cache for further single resource requests', function() {
+        var another_resource = Resource('/users/:id', { id: 42 }).one('users');
+        expect(another_resource.data.id).toEqual(42);
+        expect(another_resource.data.name).toEqual('Helmut');
+
+        var another_resource_events = Resource('/events/:id', { id: 10 }).one('events');
+        expect(another_resource_events.data.id).toEqual(10);
+        expect(another_resource_events.data.production_id).toEqual(2);
       });
 
     });
