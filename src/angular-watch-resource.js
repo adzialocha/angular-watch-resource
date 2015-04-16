@@ -1143,7 +1143,7 @@
 
         var options = _.update(defaultOptions, rOptions);
 
-        if (rData.type !== TYPE_ONE && ! _.isEmpty(rOptions.sideload)) {
+        if (rData.type !== TYPE_ONE && ! _.isEmpty(rOptions.sideload) && rOptions.dataKey === '') {
           throw 'ResourceFactoryError: resources with array data cant handle sideloading';
         }
 

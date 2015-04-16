@@ -691,7 +691,7 @@
       pointer = new ResourcePointer(rPath, rVars, data).parseCacheKey(rOptions.cacheKey);
       if (!resourceCache.exists(pointer.cacheKey)) {
         var options = _.update(defaultOptions, rOptions);
-        if (rData.type !== TYPE_ONE && !_.isEmpty(rOptions.sideload)) {
+        if (rData.type !== TYPE_ONE && !_.isEmpty(rOptions.sideload) && rOptions.dataKey === "") {
           throw "ResourceFactoryError: resources with array data cant handle sideloading";
         }
         if (!_.isEmpty(rOptions.sideload) && !_.isEmpty(rOptions.nested)) {
