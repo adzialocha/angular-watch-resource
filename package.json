@@ -1,6 +1,6 @@
 {
   "name": "angular-watch-resource",
-  "version": "0.5.5",
+  "version": "0.6.0",
   "dependencies": {},
   "devDependencies": {
     "grunt": "~0.4.5",

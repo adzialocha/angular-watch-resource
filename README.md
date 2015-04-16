@@ -1,7 +1,7 @@
 angular-watch-resource
 ======================
 
-Model Layer for large angular >v1.2 applications with some niceties - based on $watch pattern inspired by Jason Dobry's [Presentation](http://pseudobry.com/building-large-apps-with-angularjs.html).
+Model Layer for large angular >v1.3 applications with some niceties - based on $watch pattern inspired by Jason Dobry's [Presentation](http://pseudobry.com/building-large-apps-with-angularjs.html).
 
 ## Features
 
@@ -503,9 +503,12 @@ Default Options:
   interval: 0,             // interval in ms for frequent resource update requests
   silent: false,           // true to enable silent mode, does not send a request on init
 
+  dataKey: '',             // resource data is inside a key (example: "data")
+
   cacheKey: undefined,     // use a custom cache key
 
   sideload: {},            // read -> sideloading resources option (below)
+  sideloadKey: '',         // sideload resources are collected in an own object (example: "included")
   nested: {},              // read -> nested resources option (below)
 
   withCredentials: false,  // request with credentials

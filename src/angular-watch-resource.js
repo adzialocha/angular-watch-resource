@@ -87,7 +87,9 @@
       interval: 0,
       silent: false,
       cacheKey: undefined,
+      dataKey: '',
       sideload: {},
+      sideloadKey: '',
       nested: {},
       withCredentials: false,
       responseType: 'json',
@@ -492,15 +494,25 @@
 
       // fills the atomic cache with data from a sideload resource
 
-      _insertSideloadData: function(cSideloadData, cResources) {
+      _insertSideloadData: function(cSideloadData, cSideloadKey, cResources) {
+
         var _this = this;
+        var resources;
+
+        if (cSideloadKey) {
+          resources = cResources[cSideloadKey];
+        } else {
+          resources = cResources;
+        }
+
         angular.forEach(Object.keys(cSideloadData), function(sKey) {
-          if (sKey in cResources && angular.isArray(cResources[sKey])) {
-            angular.forEach(cResources[sKey], function(eItem) {
+          if (sKey in resources && angular.isArray(resources[sKey])) {
+            angular.forEach(resources[sKey], function(eItem) {
               _this._insertData(cSideloadData[sKey], eItem);
             });
           }
         });
+
       },
 
       // returns an array with atomic cache keys
@@ -528,19 +540,30 @@
       // iterates through an array and places its elements at the right spot in the cache
 
       populateCache: function(cOptions, cResourceName, cObject) {
+        
         var _this = this;
         var atomicCacheKeys = [];
-        if (angular.isArray(cObject)) {
-          angular.forEach(cObject, function(eItem) {
+        var objectData;
+
+        if (cOptions.dataKey) {
+          objectData = cObject[cOptions.dataKey];
+        } else {
+          objectData = cObject;
+        }
+
+        if (angular.isArray(objectData)) {
+          angular.forEach(objectData, function(eItem) {
             atomicCacheKeys.push(_this._insertData(cResourceName, eItem));
           });
         } else {
-          atomicCacheKeys.push(this._insertData(cResourceName, cObject));
+          atomicCacheKeys.push(this._insertData(cResourceName, objectData));
           if (! (_.isEmpty(cOptions.sideload))) {
-            this._insertSideloadData(cOptions.sideload, cObject);
+            this._insertSideloadData(cOptions.sideload, cOptions.sideloadKey, cObject);
           }
         }
+
         return atomicCacheKeys;
+
       }
 
     };
@@ -801,6 +824,7 @@
           pointer = rPointer;
 
           if (! fDisableOptimization) {
+
             optimized = requestUtils.optimize(request, pointer, options, resourceName);
             cachedAtomicCacheKeys = optimized.cachedAtomicKeys;
 
@@ -815,6 +839,7 @@
             } else {
               request = optimized.request;
             }
+
           }
 
           // fetch data from the server
@@ -824,6 +849,7 @@
             // give data to cache (we dont manipulate our resource directly)
 
             if (! fDisableCaching) {
+
               atomicCacheKeys = cacheUtils.atomic.populateCache(options, resourceName, fResult.data);
 
               // merge fetched with cached resource cacheKeys when given
@@ -833,12 +859,15 @@
               }
 
               cacheUtils.resource.buildData(pointer, atomicCacheKeys);
+
             }
 
             deferred.resolve(true);
 
           }, function(fErrorData) {
+
             deferred.reject(fErrorData);
+
           });
 
           return deferred.promise; // return handleRequest()
@@ -1195,6 +1224,7 @@
         }
 
         return resourceFactory(rPath, vars, rResourceName, options, rData);
+
       }
 
       function _manipulate(rOptions, rLocalUpdates, rResourceName) {

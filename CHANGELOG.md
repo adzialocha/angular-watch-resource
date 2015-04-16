@@ -1,6 +1,13 @@
 Changelog
 ======================
 
+### 0.6.0 (16.04.2015)
+
+**Added**
+
+* sideloadKey option added
+* dataKey option added
+
 ### 0.5.5 (24.09.2014)
 
 **Fixes**

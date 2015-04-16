@@ -1,4 +1,4 @@
-/*! angular-watch-resource.js v0.5.5 24-09-2014 */
+/*! angular-watch-resource.js v0.6.0 16-04-2015 */
 (function(window, angular, undefined) {
   "use strict";
   var ngWatchResource = angular.module("resource.service", []);
@@ -61,7 +61,9 @@
       interval: 0,
       silent: false,
       cacheKey: undefined,
+      dataKey: "",
       sideload: {},
+      sideloadKey: "",
       nested: {},
       withCredentials: false,
       responseType: "json",
@@ -307,11 +309,17 @@
         atomicCache.update(pointer.cacheKey, cObject);
         return pointer.cacheKey;
       },
-      _insertSideloadData: function(cSideloadData, cResources) {
+      _insertSideloadData: function(cSideloadData, cSideloadKey, cResources) {
         var _this = this;
+        var resources;
+        if (cSideloadKey) {
+          resources = cResources[cSideloadKey];
+        } else {
+          resources = cResources;
+        }
         angular.forEach(Object.keys(cSideloadData), function(sKey) {
-          if (sKey in cResources && angular.isArray(cResources[sKey])) {
-            angular.forEach(cResources[sKey], function(eItem) {
+          if (sKey in resources && angular.isArray(resources[sKey])) {
+            angular.forEach(resources[sKey], function(eItem) {
               _this._insertData(cSideloadData[sKey], eItem);
             });
           }
@@ -336,14 +344,20 @@
       populateCache: function(cOptions, cResourceName, cObject) {
         var _this = this;
         var atomicCacheKeys = [];
-        if (angular.isArray(cObject)) {
-          angular.forEach(cObject, function(eItem) {
+        var objectData;
+        if (cOptions.dataKey) {
+          objectData = cObject[cOptions.dataKey];
+        } else {
+          objectData = cObject;
+        }
+        if (angular.isArray(objectData)) {
+          angular.forEach(objectData, function(eItem) {
             atomicCacheKeys.push(_this._insertData(cResourceName, eItem));
           });
         } else {
-          atomicCacheKeys.push(this._insertData(cResourceName, cObject));
+          atomicCacheKeys.push(this._insertData(cResourceName, objectData));
           if (!_.isEmpty(cOptions.sideload)) {
-            this._insertSideloadData(cOptions.sideload, cObject);
+            this._insertSideloadData(cOptions.sideload, cOptions.sideloadKey, cObject);
           }
         }
         return atomicCacheKeys;

@@ -40,7 +40,14 @@ var resourcesMock = {
     { id: 6 },
     { id: 7 },
     { id: 8 }
-  ]
+  ],
+  organizationsWithDataKey: {
+    organizations: [
+      { id: 6 },
+      { id: 7 },
+      { id: 8 }
+    ]
+  }
 };
 
 var editableResourceMock = {
@@ -84,6 +91,16 @@ beforeEach(function () {
 
     $http.when( 'GET', API_BASE_PATH + '/continents' ).respond(200, sideloadData);
 
+    var sideloadDataWithKey = {
+      included: {
+        users: resourcesMock.users,
+        all_cities: resourcesMock.cities,
+        countries: resourcesMock.countries
+      }
+    };
+
+    $http.when( 'GET', API_BASE_PATH + '/continents_with_key' ).respond(200, sideloadDataWithKey);
+
     var collection = [
       resourcesMock.users[1],
       resourcesMock.users[3],
@@ -101,6 +118,8 @@ beforeEach(function () {
     $http.when( 'GET', API_BASE_PATH + '/productions?id[]=2&id[]=5&id[]=12' ).respond(200, resourcesMock.productions);
     $http.when( 'GET', API_BASE_PATH + '/organizations?id[]=6&id[]=7&id[]=8' ).respond(200, resourcesMock.organizations);
     $http.when( 'GET', API_BASE_PATH + '/users?id[]=12&id[]=42&id[]=512&id[]=712' ).respond(200, resourcesMock.users);
+
+    $http.when( 'GET', API_BASE_PATH + '/organizations_with_data_key' ).respond(200, resourcesMock.organizationsWithDataKey);
 
   });
 
@@ -245,6 +264,47 @@ describe('ResourceService', function() {
       it ('a sideload resource from the server', function() {
         expect(resource.data.all_cities[1].name).toEqual('Warszawa');
         expect(resource.data.countries[1].name).toEqual('Poland');
+      });
+
+      it ('puts its sideload resources into the cache', function() {
+        var another_resource = Resource('/cities/:id', { id: 124 }).one('cities');
+        expect(another_resource.data.id).toEqual(124);
+        expect(another_resource.data.name).toEqual('London');
+        var yet_another_resource = Resource('/countries/:id', { id: 122 }).one('countries');
+        expect(yet_another_resource.data.id).toEqual(122);
+        expect(yet_another_resource.data.name).toEqual('Germany');
+      });
+
+    });
+
+    describe('#fetch with sideload and sideloadKey option', function() {
+
+      var resource;
+
+      beforeEach(function() {
+        resource = Resource('/continents_with_key').one('continents', {
+          sideload: {
+            'users': 'users',
+            'all_cities': 'cities',
+            'countries': 'countries'
+          },
+          sideloadKey: 'included'
+        });
+      });
+
+      beforeEach(function() {
+        $http.expect( 'GET', API_BASE_PATH + '/continents_with_key' );
+        $http.flush();
+      });
+
+      afterEach(function() {
+        $http.verifyNoOutstandingExpectation();
+        $http.verifyNoOutstandingRequest();
+      });
+
+      it ('a sideload resource with key from the server', function() {
+        expect(resource.data.included.all_cities[1].name).toEqual('Warszawa');
+        expect(resource.data.included.countries[1].name).toEqual('Poland');
       });
 
       it ('puts its sideload resources into the cache', function() {
@@ -476,6 +536,34 @@ describe('ResourceService', function() {
         var another_resource = Resource('/users/:id', { id: 42 }).one('users');
         expect(another_resource.data.id).toEqual(42);
         expect(another_resource.data.name).toEqual('Helmut');
+      });
+
+    });
+
+    describe('#fetch with data key', function() {
+
+      var resource;
+
+      beforeEach(function() {
+        resource = Resource('/organizations_with_data_key').all('organizations', {
+          dataKey: 'organizations'
+        });
+        $http.expect( 'GET', API_BASE_PATH + '/organizations_with_data_key' );
+        $http.flush();
+      });
+
+      afterEach(function() {
+        $http.verifyNoOutstandingExpectation();
+        $http.verifyNoOutstandingRequest();
+      });
+
+      it ('fetch all resources from the server', function() {
+        expect(resource.data).toEqual(resourcesMock.organizationsWithDataKey.organizations);
+      });
+
+      it ('populate the cache for further single resource requests', function() {
+        var another_resource = Resource('/organizations/:id', { id: 6 }).one('organizations');
+        expect(another_resource.data.id).toEqual(6);
       });
 
     });
